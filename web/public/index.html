@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MN Technology · Catálogo</title>
+  <meta name="description" content="Catálogo y disponibilidad de productos de MN Technology.">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="/">MN <span>Technology</span></a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Catálogo</h1>
+      <p>Disponibilidad actualizada desde nuestro inventario.</p>
+    </section>
+
+    <div class="tools">
+      <label class="search">
+        <span class="sr-only">Buscar</span>
+        <input id="q" type="search" placeholder="Buscar por nombre, marca o modelo" autocomplete="off">
+      </label>
+      <label class="toggle">
+        <input id="only-stock" type="checkbox" checked>
+        Solo disponibles
+      </label>
+      <label class="currency">
+        <span class="sr-only">Moneda</span>
+        <select id="currency">
+          <option value="precio">USD</option>
+          <option value="precio_ves">Bs.</option>
+          <option value="precio_cop">COP</option>
+        </select>
+      </label>
+    </div>
+
+    <p id="status" class="status" role="status">Cargando catálogo…</p>
+    <ul id="grid" class="grid" aria-live="polite"></ul>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">© <span id="year"></span> MN Technology</div>
+  </footer>
+</body>
+</html>
