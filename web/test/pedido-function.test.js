@@ -28,7 +28,7 @@ beforeEach(() => {
 
 test('dice si los pedidos están activos', async () => {
   assert.deepEqual(await (await onRequestGet({ env })).json(), { activo: true });
-  assert.deepEqual(await (await onRequestGet({ env: {} })).json(), { activo: false });
+  assert.deepEqual(await (await onRequestGet({ env: { ...env, PEDIDOS_TOKEN: '' } })).json(), { activo: false, faltan: ['PEDIDOS_TOKEN'] });
 });
 
 test('reenvía el pedido con los tokens y solo los campos permitidos', async () => {

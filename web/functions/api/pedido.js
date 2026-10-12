@@ -19,11 +19,14 @@ const json = (body, status) =>
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
   });
 
-const configurado = (env) =>
-  !!(env.PEDIDOS_API_URL && env.PEDIDOS_TOKEN && env.CF_ACCESS_CLIENT_ID && env.CF_ACCESS_CLIENT_SECRET);
+const VARIABLES = ['PEDIDOS_API_URL', 'PEDIDOS_TOKEN', 'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET'];
+const faltantes = (env) => VARIABLES.filter((k) => !env[k]);
+const configurado = (env) => faltantes(env).length === 0;
 
+// Si falta alguna variable, dice cuáles (solo los nombres, nunca los valores) para revisar el entorno de Pages.
 export function onRequestGet({ env }) {
-  return json({ activo: configurado(env) }, 200);
+  const faltan = faltantes(env);
+  return json(faltan.length ? { activo: false, faltan } : { activo: true }, 200);
 }
 
 export async function onRequestPost({ env, request }) {
