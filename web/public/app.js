@@ -27,6 +27,8 @@ function el(tag, className, text) {
 const safePhoto = (url) =>
   typeof url === 'string' && (url.startsWith('https://') || url.startsWith('/api/foto/')) ? url : null;
 
+const initials = (item) => (item.marca || item.nombre || '?').slice(0, 2).toUpperCase();
+
 function stockLabel(n) {
   if (n <= 0) return ['Agotado', 'out'];
   if (n <= LOW_STOCK) return [`Quedan ${n}`, 'low'];
@@ -44,9 +46,11 @@ function card(item) {
     img.src = src;
     img.alt = item.nombre;
     img.loading = 'lazy';
+    // Si la foto no carga (p. ej. el archivo ya no está en el servidor), se ven las iniciales.
+    img.addEventListener('error', () => photo.replaceChildren(initials(item)), { once: true });
     photo.append(img);
   } else {
-    photo.textContent = (item.marca || item.nombre || '?').slice(0, 2).toUpperCase();
+    photo.textContent = initials(item);
   }
 
   const body = el('div', 'body');
