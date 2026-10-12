@@ -3,33 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MN Technology · Catálogo</title>
-  <meta name="description" content="Catálogo y disponibilidad de productos de MN Technology.">
+  <title>MN Technology · Tienda de tecnología</title>
+  <meta name="description" content="Catálogo de MN Technology: teléfonos, accesorios, audio, cámaras y más, con existencias reales y precios en USD, Bs. y COP.">
+  <meta name="theme-color" content="#7c3aed">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+  <script type="module" src="/app.js"></script>
 </head>
 <body>
   <header class="top">
-    <div class="wrap top-inner">
-      <a class="brand" href="/">MN <span>Technology</span></a>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="hero">
-      <h1>Catálogo</h1>
-      <p>Disponibilidad actualizada desde nuestro inventario.</p>
-    </section>
-
-    <div class="tools">
-      <label class="search">
-        <span class="sr-only">Buscar</span>
-        <input id="q" type="search" placeholder="Buscar por nombre, marca o modelo" autocomplete="off">
-      </label>
-      <label class="toggle">
-        <input id="only-stock" type="checkbox" checked>
-        Solo disponibles
-      </label>
+    <div class="top-inner">
+      <a class="brand" href="#/" aria-label="MN Technology, inicio">
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64"><path d="M8 50V14h8l16 21 16-21h8v36h-9V30L32 48 17 30v20z" fill="#fff"/></svg>
+        </span>
+        <span class="brand-text">MN <span>Technology</span></span>
+      </a>
+      <nav class="nav" id="nav" aria-label="Secciones">
+        <a href="#/" data-route="inicio">Inicio</a>
+        <a href="#/productos" data-route="productos">Productos</a>
+        <a href="#/precios" data-route="precios">Lista de precios</a>
+        <a href="#/nosotros" data-route="nosotros">Nosotros</a>
+        <a href="#/contacto" data-route="contacto">Contacto</a>
+      </nav>
+      <form class="search" id="search-form" role="search">
+        <label class="sr-only" for="q">Buscar productos</label>
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Busca teléfonos, accesorios, marcas…" autocomplete="off">
+      </form>
       <label class="currency">
         <span class="sr-only">Moneda</span>
         <select id="currency">
@@ -38,14 +42,73 @@
           <option value="precio_cop">COP</option>
         </select>
       </label>
+      <a class="cart-btn" id="cart-btn" href="#/carrito" aria-label="Carrito">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+        <span class="cart-count" id="cart-count" hidden></span>
+      </a>
+      <button class="menu-btn" id="menu-btn" type="button" aria-label="Menú" aria-expanded="false" aria-controls="nav">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
     </div>
+  </header>
 
-    <p id="status" class="status" role="status">Cargando catálogo…</p>
-    <ul id="grid" class="grid" aria-live="polite"></ul>
-  </main>
+  <main id="app" tabindex="-1"></main>
+
+  <dialog id="detail" class="detail" aria-labelledby="detail-name">
+    <button class="close" type="button" data-close aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="detail-photo" id="detail-photo"></div>
+    <div class="detail-body">
+      <p class="brand-tag" id="detail-brand"></p>
+      <h2 id="detail-name"></h2>
+      <p class="muted small" id="detail-meta"></p>
+      <dl class="spec-list" id="detail-spec-list"></dl>
+      <dl class="prices" id="detail-prices"></dl>
+      <p class="detail-foot"><span id="detail-stock" class="stock"></span><span class="code" id="detail-code"></span></p>
+      <div class="detail-actions">
+        <button id="detail-add" class="btn" type="button">Agregar al carrito</button>
+        <a id="detail-whatsapp" class="btn btn-wa" target="_blank" rel="noopener" hidden>Consultar por WhatsApp</a>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="chat" id="chat" hidden></div>
 
   <footer class="foot">
-    <div class="wrap">© <span id="year"></span> MN Technology</div>
+    <div class="foot-grid wrap">
+      <div class="foot-brand">
+        <a class="brand" href="#/">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><path d="M8 50V14h8l16 21 16-21h8v36h-9V30L32 48 17 30v20z" fill="#fff"/></svg>
+          </span>
+          <span class="brand-text">MN <span>Technology</span></span>
+        </a>
+        <p>Tecnología, accesorios y más. Lo que ves en este catálogo está disponible hoy.</p>
+      </div>
+      <div>
+        <h3>Tienda</h3>
+        <ul class="foot-links">
+          <li><a href="#/productos">Productos</a></li>
+          <li><a href="#/precios">Lista de precios</a></li>
+          <li><a href="#/nosotros">Nosotros</a></li>
+          <li><a href="#/contacto">Contacto</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Categorías</h3>
+        <ul id="foot-cats" class="foot-links"></ul>
+      </div>
+      <div id="foot-contact" hidden>
+        <h3>Contacto</h3>
+        <ul id="foot-contact-list" class="foot-links"></ul>
+      </div>
+    </div>
+    <div class="foot-bottom wrap">
+      <span>© <span id="year"></span> MN Technology</span>
+      <span>Precios y disponibilidad sujetos a cambio sin previo aviso.</span>
+    </div>
   </footer>
 </body>
 </html>

@@ -16,7 +16,12 @@ const pool = new pg.Pool({
   options: '-c default_transaction_read_only=on -c statement_timeout=5000',
 });
 
-const server = http.createServer(createHandler({ query: (sql) => pool.query(sql) }));
+const server = http.createServer(
+  createHandler({
+    query: (sql, params) => pool.query(sql, params),
+    photoOrigin: process.env.PHOTO_ORIGIN || 'http://127.0.0.1:1107',
+  }),
+);
 
 server.listen(port, host, () => {
   console.log(`API de stock escuchando en http://${host}:${port}`);

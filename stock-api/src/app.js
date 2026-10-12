@@ -1,4 +1,7 @@
-import { STOCK_SQL, toPublicItem } from './query.js';
+import { STOCK_SQL, PHOTO_SQL, toPublicItem, localPhotoPath } from './query.js';
+
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const PHOTO_TYPES = /^image\/(jpeg|png|webp|gif|avif)$/;
 
 function send(res, status, body) {
   res.writeHead(status, {
@@ -8,7 +11,41 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-export function createHandler({ query, log = console }) {
+// photoOrigin: la app MN Tech local (nginx), que ya sirve las fotos que sube Yvan.
+export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http://127.0.0.1:1107', log = console }) {
+  async function photo(res, code) {
+    let path;
+    try {
+      const { rows } = await query(PHOTO_SQL, [code]);
+      path = localPhotoPath(rows[0]?.foto_url);
+    } catch (err) {
+      log.error('Error leyendo la foto:', err.message);
+      return send(res, 503, { error: 'Foto no disponible' });
+    }
+    if (!path) return send(res, 404, { error: 'Sin foto' });
+
+    try {
+      const upstream = await fetchPhoto(new URL(path, photoOrigin), { redirect: 'error' });
+      const type = (upstream.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+      if (!upstream.ok || !PHOTO_TYPES.test(type)) {
+        log.error(`Foto rechazada ${path}: HTTP ${upstream.status} ${type || 'sin Content-Type'}`);
+        return send(res, 404, { error: 'Sin foto' });
+      }
+      const body = Buffer.from(await upstream.arrayBuffer());
+      if (body.length > MAX_PHOTO_BYTES) return send(res, 404, { error: 'Sin foto' });
+      res.writeHead(200, {
+        'Content-Type': type,
+        'Content-Length': body.length,
+        'Cache-Control': 'public, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      return res.end(body);
+    } catch (err) {
+      log.error('Error trayendo la foto:', err.message);
+      return send(res, 503, { error: 'Foto no disponible' });
+    }
+  }
+
   return async (req, res) => {
     const { pathname } = new URL(req.url, 'http://localhost');
 
@@ -29,6 +66,17 @@ export function createHandler({ query, log = console }) {
         log.error('Error leyendo el stock:', err.message);
         return send(res, 503, { error: 'Stock no disponible' });
       }
+    }
+
+    const fotoMatch = pathname.match(/^\/foto\/([^/]{1,64})$/);
+    if (fotoMatch) {
+      let code;
+      try {
+        code = decodeURIComponent(fotoMatch[1]);
+      } catch {
+        return send(res, 404, { error: 'No encontrado' });
+      }
+      return photo(res, code);
     }
 
     return send(res, 404, { error: 'No encontrado' });
