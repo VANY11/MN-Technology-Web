@@ -441,6 +441,20 @@ body[data-page="precios"] .toast { bottom: 96px; }
 .cart-empty .cta-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
 .sent-btns { width: 100%; display: grid; gap: 10px; margin-top: 6px; }
 
+.trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.form-error { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgb(220 38 38 / 0.35); background: rgb(220 38 38 / 0.08); color: #b91c1c; font-size: 14px; font-weight: 600; }
+.form-error p { margin: 0; }
+@media (prefers-color-scheme: dark) { .form-error { color: #fca5a5; } }
+.form-error .small { font-weight: 500; }
+.received { max-width: 620px; margin: 0 auto; }
+.received h1 { margin: 6px 0 0; }
+.received-number { font-size: 22px; font-weight: 800; letter-spacing: .04em; color: var(--brand-ink); font-variant-numeric: tabular-nums; }
+.received-list { width: 100%; list-style: none; margin: 10px 0 4px; padding: 0; text-align: left; border-top: 1px solid var(--line); }
+.received-list li { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.received-list strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.received-total { font-size: 16px !important; }
+.received-total strong { font-size: 18px; }
+
 /* ---------- Chat ---------- */
 .chat { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
 body[data-page="precios"] .chat { bottom: 96px; }

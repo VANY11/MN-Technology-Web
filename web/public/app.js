@@ -9,6 +9,7 @@ const FORMATS = {
   precio_ves: new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'VES' }),
   precio_cop: new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }),
 };
+const CURRENCY_CODES = { precio: 'USD', precio_ves: 'VES', precio_cop: 'COP' };
 const CURRENCY_NAMES = { precio: 'Dólares (USD)', precio_ves: 'Bolívares (Bs.)', precio_cop: 'Pesos (COP)' };
 const number = new Intl.NumberFormat('es-VE');
 const CONTACT = STORE.contacto;
@@ -21,6 +22,7 @@ const detail = $('detail');
 
 let items = [];
 let loadError = false;
+let pedidosOnline = false; // la web guarda el pedido en el sistema MN Tech (GET /api/pedido)
 // Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
 let specFilters = new Map();
 let sortBy = 'nombre';
@@ -977,12 +979,23 @@ function checkoutForm() {
   notas.placeholder = 'Color, modelo, hora para retirar…';
   form.append(field('Notas', notas));
 
-  const label = CONTACT.whatsapp ? 'Enviar pedido por WhatsApp' : 'Copiar pedido';
-  const submit = withIcon(el('button', `btn btn-block${CONTACT.whatsapp ? ' btn-wa' : ''}`, label), CONTACT.whatsapp ? 'send' : 'copy');
+  // Campo trampa para robots: oculto para las personas y fuera del orden del teclado.
+  const trap = input({ name: 'sitio', tabIndex: -1, autocomplete: 'off' });
+  const trapBox = el('div', 'trap');
+  trapBox.setAttribute('aria-hidden', 'true');
+  trapBox.append(trap);
+  form.append(trapBox);
+
+  const online = pedidosOnline;
+  const label = online ? 'Enviar pedido' : CONTACT.whatsapp ? 'Enviar pedido por WhatsApp' : 'Copiar pedido';
+  const submit = withIcon(el('button', `btn btn-block${!online && CONTACT.whatsapp ? ' btn-wa' : ''}`, label), online || CONTACT.whatsapp ? 'send' : 'copy');
   submit.type = 'submit';
-  form.append(submit);
+  const errorBox = el('div', 'form-error');
+  errorBox.setAttribute('role', 'alert');
+  errorBox.hidden = true;
+  form.append(errorBox, submit);
   if (PEDIDOS.aviso) form.append(el('p', 'small muted', PEDIDOS.aviso));
-  if (!CONTACT.whatsapp) form.append(el('p', 'small muted', 'Copia tu pedido y envíanoslo por nuestros canales de contacto.'));
+  if (!online && !CONTACT.whatsapp) form.append(el('p', 'small muted', 'Copia tu pedido y envíanoslo por nuestros canales de contacto.'));
 
   box.append(el('h2', null, 'Datos para tu pedido'), form);
 
@@ -998,12 +1011,93 @@ function checkoutForm() {
       notas: notas.value.trim(),
     };
     try { localStorage.setItem('cliente', JSON.stringify({ nombre: datos.nombre, telefono: datos.telefono })); } catch {}
+    if (online) return sendOrder(datos);
     const text = orderText(datos);
     if (CONTACT.whatsapp) window.open(waLink(text), '_blank', 'noopener');
     else copyText(submit, text, label);
     box.replaceChildren(sentPanel(datos, text));
   });
+
+  // Pedido en línea: queda guardado en el sistema MN Tech (pantalla «Pedidos web»).
+  async function sendOrder(datos) {
+    const lines = orderLines();
+    const cur = currency.value;
+    const span = submit.lastChild;
+    submit.disabled = true;
+    span.textContent = 'Enviando…';
+    errorBox.hidden = true;
+    let res = null;
+    let data = null;
+    try {
+      res = await fetch('/api/pedido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          nombre: datos.nombre, telefono: datos.telefono, entrega: datos.entrega, direccion: datos.direccion,
+          pago: datos.pago, notas: datos.notas, moneda: CURRENCY_CODES[cur], sitio: trap.value,
+          items: lines.map(([it, n]) => ({ codigo: it.codigo, cantidad: n })),
+        }),
+      });
+      data = await res.json().catch(() => null);
+    } catch {}
+    if (res?.status === 201 && data?.numero) {
+      order.clear();
+      saveCart();
+      $('toast').hidden = true;
+      app.replaceChildren(receivedView({ ...datos, numero: data.numero }, lines, cur));
+      requestAnimationFrame(() => window.scrollTo(0, 0));
+      return;
+    }
+    submit.disabled = false;
+    span.textContent = label;
+    const known = res && [400, 409, 429].includes(res.status) && data?.error;
+    errorBox.replaceChildren(el('p', null, known ? data.error : 'No pudimos enviar tu pedido en este momento. Intenta de nuevo en unos minutos.'));
+    if (res?.status === 409) errorBox.append(el('p', 'small', 'Ajusta las cantidades en tu carrito y vuelve a enviarlo.'));
+    if (!known && CONTACT.whatsapp) {
+      datos.numero = orderNumber();
+      const wa = withIcon(link(waLink(orderText(datos)), 'btn btn-wa btn-block', 'Enviarlo por WhatsApp'), 'chat');
+      wa.target = '_blank';
+      wa.rel = 'noopener';
+      errorBox.append(wa);
+    }
+    errorBox.hidden = false;
+  }
   return box;
+}
+
+// Pedido guardado en el servidor: número, resumen y qué sigue. El carrito ya quedó vacío.
+function receivedView(datos, lines, cur) {
+  const wrap = el('div', 'cart-page wrap');
+  const card = el('div', 'cart-empty received');
+  const ic = el('span', 'cart-empty-icon');
+  ic.append(icon('check'));
+  card.append(
+    ic,
+    el('h1', null, '¡Pedido recibido!'),
+    el('p', 'received-number', datos.numero),
+    el('p', 'muted', `Te contactaremos al ${datos.telefono} para confirmar disponibilidad, precio y entrega. Guarda tu número de pedido.`),
+  );
+  const list = el('ul', 'received-list');
+  for (const [it, n] of lines) {
+    const li = el('li');
+    li.append(el('span', null, `${n} × ${it.nombre}`), el('strong', null, hasPrice(it, cur) ? FORMATS[cur].format(it[cur] * n) : 'Por confirmar'));
+    list.append(li);
+  }
+  const total = el('li', 'received-total');
+  total.append(el('span', null, 'Total aproximado'), el('strong', null, FORMATS[cur].format(orderTotal(lines, cur))));
+  list.append(total);
+  card.append(list);
+  const btns = el('div', 'cta-btns');
+  btns.append(withIcon(link('#/productos', 'btn', 'Seguir comprando'), 'arrow', true));
+  if (CONTACT.whatsapp) {
+    const wa = withIcon(link(waLink(`Hola, hice el pedido ${datos.numero} en la web.`), 'btn btn-outline', 'Escríbenos por WhatsApp'), 'chat');
+    wa.target = '_blank';
+    wa.rel = 'noopener';
+    btns.append(wa);
+  }
+  card.append(btns);
+  wrap.append(card);
+  return wrap;
 }
 
 // Después de enviar: el pedido sigue en el carrito hasta que el cliente lo vacíe, por si WhatsApp no abrió.
@@ -1327,6 +1421,10 @@ currency.addEventListener('change', () => {
 
 async function load() {
   render();
+  const estadoPedidos = fetch('/api/pedido', { headers: { Accept: 'application/json' } })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => { pedidosOnline = d?.activo === true; })
+    .catch(() => {});
   try {
     const res = await fetch('/api/stock', { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(String(res.status));
@@ -1334,6 +1432,7 @@ async function load() {
   } catch {
     loadError = true;
   }
+  await estadoPedidos;
   buildBrandNames();
   if (!loadError) syncCart();
   fillFooter();

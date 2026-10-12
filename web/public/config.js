@@ -15,7 +15,7 @@ export const STORE = {
   pedidos: {
     entrega: ['Retiro en tienda', 'Envío a domicilio'],
     pago: ['Efectivo (USD)', 'Pago móvil', 'Transferencia', 'Zelle', 'Binance'],
-    aviso: 'Te confirmamos disponibilidad, precio y forma de entrega por WhatsApp antes de cobrar.',
+    aviso: 'Te contactamos para confirmar disponibilidad, precio y forma de entrega antes de cobrar.',
   },
 
   // Burbuja de chat (abre WhatsApp). Solo aparece si hay número de WhatsApp.
