@@ -14,6 +14,9 @@ GRANT USAGE ON SCHEMA public TO mnstock;
 -- supplier_id ni maranet_stock: aunque alguien cambie la consulta, no puede leerlas.
 GRANT SELECT (
   code, name, brand, model, color, ram, storage,
-  price, price_ves, price_cop, stock, foto_url,
+  price, price_ves, price_cop, stock, foto_url, category_id,
   is_active, publicado, maranet_only
 ) ON public.mnstore_products TO mnstock;
+
+-- Nombre de cada categoría, para los filtros de la web.
+GRANT SELECT (id, name) ON public.mnstore_categories TO mnstock;

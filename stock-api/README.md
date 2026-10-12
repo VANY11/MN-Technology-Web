@@ -7,7 +7,7 @@ Cloudflare Access; nunca se abre un puerto en el router.
 - Escucha solo en `127.0.0.1:8080` (la app `mn-technology` sigue en el 1107 detrás de nginx).
 - Lee la base propia `mn_technology`, nunca las tablas `mnstore_*` de MaraNet.
 - Entra con el rol `mnstock`, que solo puede leer las columnas públicas de `mnstore_products`
-  y además tiene todas sus transacciones en modo solo lectura.
+  (y el nombre de cada categoría en `mnstore_categories`) y además tiene todas sus transacciones en modo solo lectura.
 - Muestra solo productos activos (`is_active`), con stock mayor que 0 y que no sean `maranet_only`.
 - Nunca devuelve `cost`, `imei`, `serial_number`, `supplier_id` ni `maranet_stock`.
 
@@ -18,13 +18,21 @@ Cloudflare Access; nunca se abre un puerto en el router.
 ```json
 [
   {
-    "codigo": "LAP-001", "nombre": "Laptop 14", "marca": "Lenovo", "modelo": "IdeaPad",
+    "codigo": "LAP-001", "nombre": "Laptop 14", "categoria": "Laptops", "marca": "Lenovo", "modelo": "IdeaPad",
     "color": null, "ram": "16GB", "almacenamiento": "512GB",
     "precio": 549, "precio_ves": null, "precio_cop": 2200000,
-    "disponible": 7, "foto": "https://..."
+    "disponible": 7, "foto": "/api/foto/LAP-001?v=3f2a9c01de"
   }
 ]
 ```
+
+`foto` es la URL https si el sistema guardó una, o `/api/foto/<código>?v=...` si la foto está
+guardada en el servidor (el `v` cambia cuando cambia la foto, para renovar la caché).
+
+`GET /foto/<código>` devuelve la imagen de ese producto, solo si el producto se ve en la web.
+La pide a la app MN Tech local (`PHOTO_ORIGIN`, por defecto `http://127.0.0.1:1107`) con la ruta
+guardada en `foto_url`, y solo entrega imágenes (jpeg, png, webp, gif, avif) de hasta 8 MB.
+En la web, `/api/foto/<código>` la trae por el túnel y Cloudflare la guarda un día en caché.
 
 `GET /health` responde `{"ok": true}`. Cualquier otro método da 405.
 

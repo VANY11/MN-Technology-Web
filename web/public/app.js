@@ -11,6 +11,7 @@ const statusEl = $('status');
 const q = $('q');
 const onlyStock = $('only-stock');
 const currency = $('currency');
+const category = $('category');
 let items = [];
 
 $('year').textContent = new Date().getFullYear();
@@ -22,8 +23,9 @@ function el(tag, className, text) {
   return node;
 }
 
-// Solo fotos públicas por https; una ruta del servidor local no se ve desde internet.
-const safePhoto = (url) => (typeof url === 'string' && url.startsWith('https://') ? url : null);
+// Fotos públicas por https, o las del servidor que sirve /api/foto por el túnel.
+const safePhoto = (url) =>
+  typeof url === 'string' && (url.startsWith('https://') || url.startsWith('/api/foto/')) ? url : null;
 
 function stockLabel(n) {
   if (n <= 0) return ['Agotado', 'out'];
@@ -48,6 +50,7 @@ function card(item) {
   }
 
   const body = el('div', 'body');
+  if (item.categoria) body.append(el('p', 'cat', item.categoria));
   body.append(el('h2', 'name', item.nombre));
   const meta = [item.marca, item.modelo].filter(Boolean).join(' · ');
   if (meta) body.append(el('p', 'meta', meta));
@@ -76,10 +79,12 @@ function card(item) {
 
 function render() {
   const term = q.value.trim().toLowerCase();
+  const cat = category.value;
   const shown = items.filter((it) => {
     if (onlyStock.checked && it.disponible <= 0) return false;
+    if (cat && it.categoria !== cat) return false;
     if (!term) return true;
-    return [it.nombre, it.marca, it.modelo, it.codigo].some((v) => v && v.toLowerCase().includes(term));
+    return [it.nombre, it.marca, it.modelo, it.codigo, it.categoria].some((v) => v && v.toLowerCase().includes(term));
   });
   grid.replaceChildren(...shown.map(card));
   if (!items.length) statusEl.textContent = 'Pronto publicaremos nuestro catálogo.';
@@ -87,11 +92,37 @@ function render() {
   else statusEl.textContent = '';
 }
 
+// Solo aparecen las categorías que tienen productos publicados, con cuántos hay.
+function fillCategories() {
+  const counts = new Map();
+  for (const it of items) if (it.categoria) counts.set(it.categoria, (counts.get(it.categoria) || 0) + 1);
+  const names = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'es'));
+  const options = names.map((n) => {
+    const opt = el('option', null, `${n} (${counts.get(n)})`);
+    opt.value = n;
+    return opt;
+  });
+  category.replaceChildren(category.options[0], ...options);
+  category.parentElement.hidden = names.length === 0;
+  const fromUrl = new URLSearchParams(location.search).get('categoria');
+  if (fromUrl && counts.has(fromUrl)) category.value = fromUrl;
+}
+
+// La categoría elegida queda en la dirección (?categoria=...) para poder compartir el enlace.
+function onCategory() {
+  const url = new URL(location.href);
+  if (category.value) url.searchParams.set('categoria', category.value);
+  else url.searchParams.delete('categoria');
+  history.replaceState(null, '', url);
+  render();
+}
+
 async function load() {
   try {
     const res = await fetch('/api/stock', { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(String(res.status));
     items = await res.json();
+    fillCategories();
     render();
   } catch {
     statusEl.textContent = 'No pudimos cargar el catálogo en este momento. Intenta de nuevo en unos minutos.';
@@ -101,4 +132,5 @@ async function load() {
 q.addEventListener('input', render);
 onlyStock.addEventListener('change', render);
 currency.addEventListener('change', render);
+category.addEventListener('change', onCategory);
 load();

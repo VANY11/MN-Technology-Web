@@ -1,21 +1,54 @@
-// Única consulta que hace la API. Solo columnas que el cliente puede ver:
+import { createHash } from 'node:crypto';
+
+// Consultas que hace la API. Solo columnas que el cliente puede ver:
 // nada de costos, proveedores, IMEI, seriales ni stock de MaraNet.
 // Lee la base propia de MN Tech (mn_technology), nunca las tablas mnstore_* de MaraNet.
 // El rol mnstock solo tiene permiso sobre estas columnas (deploy/rol-solo-lectura.sql).
+const PUBLIC_FILTER = 'p.is_active AND NOT p.maranet_only AND p.stock > 0';
+
 export const STOCK_SQL = `
-  SELECT code, name, brand, model, color, ram, storage,
-         price, price_ves, price_cop, stock, foto_url
-  FROM mnstore_products
-  WHERE is_active AND NOT maranet_only AND stock > 0
-  ORDER BY name
+  SELECT p.code, p.name, p.brand, p.model, p.color, p.ram, p.storage,
+         p.price, p.price_ves, p.price_cop, p.stock, p.foto_url,
+         c.name AS category
+  FROM mnstore_products p
+  LEFT JOIN mnstore_categories c ON c.id = p.category_id
+  WHERE ${PUBLIC_FILTER}
+  ORDER BY p.name
+`;
+
+// La foto de un solo producto, y solo si ese producto se ve en la web.
+export const PHOTO_SQL = `
+  SELECT p.foto_url
+  FROM mnstore_products p
+  WHERE p.code = $1 AND ${PUBLIC_FILTER}
 `;
 
 const money = (v) => (v === null || v === undefined ? null : Number(v));
+
+// Ruta de una foto guardada por el sistema MN Tech (p. ej. /uploads/productos/a.jpg).
+// Nada de "..", "//", ni caracteres raros: la API la pide a la app local tal cual.
+export function localPhotoPath(url) {
+  if (typeof url !== 'string') return null;
+  const path = url.trim();
+  if (!/^\/[A-Za-z0-9._~\/-]+$/.test(path) || path.includes('..') || path.includes('//')) return null;
+  return path;
+}
+
+// URL de la foto que ve el cliente: una https pública se deja igual; una ruta local se sirve
+// por /api/foto/<código>, con ?v= para que la caché se renueve cuando cambie la foto.
+export function publicPhoto(code, url) {
+  if (typeof url === 'string' && url.startsWith('https://')) return url;
+  const path = localPhotoPath(url);
+  if (!path || !code) return null;
+  const v = createHash('sha1').update(path).digest('hex').slice(0, 10);
+  return `/api/foto/${encodeURIComponent(code)}?v=${v}`;
+}
 
 export function toPublicItem(row) {
   return {
     codigo: row.code,
     nombre: row.name,
+    categoria: row.category ?? null,
     marca: row.brand ?? null,
     modelo: row.model ?? null,
     color: row.color ?? null,
@@ -25,6 +58,6 @@ export function toPublicItem(row) {
     precio_ves: money(row.price_ves),
     precio_cop: money(row.price_cop),
     disponible: Math.max(0, Number(row.stock) || 0),
-    foto: row.foto_url ?? null,
+    foto: publicPhoto(row.code, row.foto_url),
   };
 }
