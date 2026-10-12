@@ -8,8 +8,8 @@ const PUBLIC_FILTER = 'p.is_active AND NOT p.maranet_only AND p.stock > 0';
 
 export const STOCK_SQL = `
   SELECT p.code, p.name, p.brand, p.model, p.color, p.ram, p.storage,
-         p.price, p.price_ves, p.price_cop, p.stock, p.foto_url,
-         c.name AS category
+         p.price, p.price_ves, p.price_cop, p.stock, p.foto_url, p.specs,
+         c.name AS category, c.template_fields
   FROM mnstore_products p
   LEFT JOIN mnstore_categories c ON c.id = p.category_id
   WHERE ${PUBLIC_FILTER}
@@ -44,6 +44,30 @@ export function publicPhoto(code, url) {
   return `/api/foto/${encodeURIComponent(code)}?v=${v}`;
 }
 
+const parseJson = (v, fallback) => {
+  if (v === null || v === undefined) return fallback;
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch { return fallback; }
+};
+
+// Especificaciones del producto, solo las que su categoría define como campos (template_fields),
+// en el orden de la categoría y con su nombre visible. Cualquier otra clave guardada en specs no sale.
+export function publicSpecs(templateFields, specs) {
+  const fields = parseJson(templateFields, []);
+  const values = parseJson(specs, {});
+  if (!Array.isArray(fields) || !values || typeof values !== 'object') return [];
+  const out = [];
+  for (const f of fields) {
+    if (!f || typeof f !== 'object' || !f.key) continue;
+    const raw = values[f.key];
+    if (raw === null || raw === undefined || typeof raw === 'object') continue;
+    const valor = String(raw).trim();
+    const campo = String(f.label || f.key).trim();
+    if (valor && campo) out.push({ campo, valor: valor.slice(0, 80) });
+  }
+  return out;
+}
+
 export function toPublicItem(row) {
   return {
     codigo: row.code,
@@ -59,5 +83,6 @@ export function toPublicItem(row) {
     precio_cop: money(row.price_cop),
     disponible: Math.max(0, Number(row.stock) || 0),
     foto: publicPhoto(row.code, row.foto_url),
+    especificaciones: publicSpecs(row.template_fields, row.specs),
   };
 }

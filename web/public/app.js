@@ -20,10 +20,13 @@ const sort = $('sort');
 const catsNav = $('categories');
 const more = $('more');
 const detail = $('detail');
+const filtersEl = $('filters');
 
 let items = [];
 let category = '';
 let limit = PAGE;
+// Filtros por especificación de la categoría elegida: nombre del campo → valores marcados.
+let specFilters = new Map();
 
 $('year').textContent = new Date().getFullYear();
 
@@ -71,8 +74,13 @@ const priceText = (item, key = currency.value) => {
   return value === null || value === undefined ? null : FORMATS[key].format(value);
 };
 
+const specList = (item) => (Array.isArray(item.especificaciones) ? item.especificaciones : []);
+
+// Chips de la tarjeta: RAM, almacenamiento y color, y luego las especificaciones de su categoría.
 function specsOf(item) {
-  return [item.ram && `RAM ${item.ram}`, item.almacenamiento, item.color].filter(Boolean);
+  const base = [item.ram && `RAM ${item.ram}`, item.almacenamiento, item.color].filter(Boolean);
+  const extra = specList(item).map((s) => s.valor).filter((v) => !base.includes(v));
+  return [...base, ...extra].slice(0, 4);
 }
 
 function card(item) {
@@ -117,8 +125,15 @@ function showDetail(item) {
   $('detail-name').textContent = item.nombre;
   $('detail-meta').textContent = [item.marca, item.modelo].filter(Boolean).join(' · ');
 
-  const specs = specsOf(item);
-  $('detail-specs').replaceChildren(...specs.map((s) => el('li', null, s)));
+  const base = [item.ram && `RAM ${item.ram}`, item.almacenamiento, item.color].filter(Boolean);
+  $('detail-specs').replaceChildren(...base.map((s) => el('li', null, s)));
+  $('detail-spec-list').replaceChildren(
+    ...specList(item).map((s) => {
+      const div = el('div');
+      div.append(el('dt', null, s.campo), el('dd', null, s.valor));
+      return div;
+    }),
+  );
 
   // La moneda elegida primero, luego las otras que tengan precio.
   const keys = [currency.value, ...Object.keys(FORMATS).filter((k) => k !== currency.value)];
@@ -188,6 +203,7 @@ function fillCategories() {
 function selectCategory(name) {
   category = name;
   limit = PAGE;
+  specFilters = new Map();
   const url = new URL(location.href);
   if (name) url.searchParams.set('categoria', name);
   else url.searchParams.delete('categoria');
@@ -202,6 +218,72 @@ function selectCategory(name) {
 
 const normalize = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+const matchesSpecs = (item) => {
+  for (const [campo, valores] of specFilters) {
+    if (!valores.size) continue;
+    const spec = specList(item).find((s) => s.campo === campo);
+    if (!spec || !valores.has(spec.valor)) return false;
+  }
+  return true;
+};
+
+// Filtros de la categoría elegida, a partir de las especificaciones de sus productos.
+// Solo campos con al menos dos valores distintos (con uno solo no hay nada que filtrar).
+function renderFilters(inCategory) {
+  if (!category) {
+    filtersEl.hidden = true;
+    filtersEl.replaceChildren();
+    return;
+  }
+  const fields = new Map();
+  for (const it of inCategory) {
+    for (const { campo, valor } of specList(it)) {
+      if (!fields.has(campo)) fields.set(campo, new Map());
+      const values = fields.get(campo);
+      values.set(valor, (values.get(valor) || 0) + 1);
+    }
+  }
+  const groups = [];
+  for (const [campo, values] of fields) {
+    if (values.size < 2) continue;
+    const group = el('div', 'filter-group');
+    group.append(el('span', 'filter-label', campo));
+    const pills = el('div', 'pills');
+    const chosen = specFilters.get(campo) || new Set();
+    [...values.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es', { numeric: true }))
+      .slice(0, 30)
+      .forEach(([valor, count]) => {
+        const pill = el('button', 'pill');
+        pill.type = 'button';
+        pill.setAttribute('aria-pressed', String(chosen.has(valor)));
+        pill.append(el('span', null, valor), el('span', 'pill-count', number.format(count)));
+        pill.addEventListener('click', () => toggleFilter(campo, valor));
+        pills.append(pill);
+      });
+    group.append(pills);
+    groups.push(group);
+  }
+  const active = [...specFilters.values()].some((v) => v.size);
+  if (active) {
+    const clear = el('button', 'clear', 'Quitar filtros');
+    clear.type = 'button';
+    clear.addEventListener('click', () => { specFilters = new Map(); limit = PAGE; render(); });
+    groups.push(clear);
+  }
+  filtersEl.replaceChildren(...groups);
+  filtersEl.hidden = groups.length === 0;
+}
+
+function toggleFilter(campo, valor) {
+  const set = specFilters.get(campo) || new Set();
+  if (set.has(valor)) set.delete(valor);
+  else set.add(valor);
+  specFilters.set(campo, set);
+  limit = PAGE;
+  render();
+}
+
 const SORTS = {
   nombre: (a, b) => a.nombre.localeCompare(b.nombre, 'es'),
   'precio-asc': (a, b) => (a.precio ?? Infinity) - (b.precio ?? Infinity),
@@ -213,11 +295,15 @@ function render() {
   for (const btn of catsNav.children) btn.setAttribute('aria-current', String(btn.dataset.cat === category));
 
   const terms = normalize(q.value.trim()).split(/\s+/).filter(Boolean);
-  const shown = items
+  const inCategory = category ? items.filter((it) => categoryOf(it) === category) : items;
+  renderFilters(inCategory);
+  const shown = inCategory
     .filter((it) => {
-      if (category && categoryOf(it) !== category) return false;
+      if (!matchesSpecs(it)) return false;
       if (!terms.length) return true;
-      const text = normalize([it.nombre, it.marca, it.modelo, it.codigo, it.categoria].filter(Boolean).join(' '));
+      const text = normalize(
+        [it.nombre, it.marca, it.modelo, it.codigo, it.categoria, ...specList(it).map((x) => x.valor)].filter(Boolean).join(' '),
+      );
       return terms.every((t) => text.includes(t));
     })
     .sort(SORTS[sort.value]);

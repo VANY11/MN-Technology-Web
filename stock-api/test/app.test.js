@@ -22,6 +22,8 @@ test('GET /stock devuelve solo los campos públicos', async () => {
         code: 'LAP-001', name: 'Laptop 14', brand: 'Lenovo', model: 'IdeaPad', color: null,
         ram: '16GB', storage: '512GB', price: '549.00', price_ves: null, price_cop: '2200000.00',
         stock: 7, foto_url: 'https://x/l.jpg', cost: '400.00', imei: '123', category: 'Laptops',
+        template_fields: [{ key: 'tipo', label: 'Tipo', type: 'select' }, { key: 'pantalla', label: 'Pantalla' }, { key: 'vacio', label: 'Vacío' }],
+        specs: { tipo: 'Ultrabook', pantalla: 14, vacio: ' ', clave_interna: 'no sale' },
       },
       { code: 'MON-024', name: 'Monitor 24', price: '159.00', stock: -2 },
       { code: 'TEL 1', name: 'Tel', price: null, stock: 1, foto_url: '/uploads/a.jpg' },
@@ -37,11 +39,12 @@ test('GET /stock devuelve solo los campos públicos', async () => {
         codigo: 'LAP-001', nombre: 'Laptop 14', categoria: 'Laptops', marca: 'Lenovo', modelo: 'IdeaPad', color: null,
         ram: '16GB', almacenamiento: '512GB', precio: 549, precio_ves: null, precio_cop: 2200000,
         disponible: 7, foto: 'https://x/l.jpg',
+        especificaciones: [{ campo: 'Tipo', valor: 'Ultrabook' }, { campo: 'Pantalla', valor: '14' }],
       },
       {
         codigo: 'MON-024', nombre: 'Monitor 24', categoria: null, marca: null, modelo: null, color: null,
         ram: null, almacenamiento: null, precio: 159, precio_ves: null, precio_cop: null,
-        disponible: 0, foto: null,
+        disponible: 0, foto: null, especificaciones: [],
       },
     ]);
     const [, , tel, bad] = body;
