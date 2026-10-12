@@ -21,16 +21,24 @@ const detail = $('detail');
 
 let items = [];
 let loadError = false;
-// Estado que no va en la dirección: filtros por especificación, orden, cuántos se ven y cantidades del pedido.
+// Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
 let specFilters = new Map();
 let sortBy = 'nombre';
 let limit = PAGE;
-const order = new Map(); // código → cantidad (lista de precios)
+// Carrito: código → cantidad. Vive solo en este navegador; el pedido se envía por WhatsApp.
+const order = new Map();
+const PEDIDOS = STORE.pedidos || {};
 
 $('year').textContent = new Date().getFullYear();
 try {
   const saved = localStorage.getItem('moneda');
   if (saved && FORMATS[saved]) currency.value = saved;
+} catch {}
+try {
+  const saved = JSON.parse(localStorage.getItem('carrito') || '[]');
+  if (Array.isArray(saved)) {
+    for (const [code, n] of saved) if (typeof code === 'string' && Number.isInteger(n) && n > 0) order.set(code, n);
+  }
 } catch {}
 
 /* ---------- Utilidades ---------- */
@@ -130,6 +138,70 @@ function photoInto(box, item) {
   box.replaceChildren(img);
 }
 
+/* ---------- Carrito ---------- */
+
+const cartCount = () => [...order.values()].reduce((s, n) => s + n, 0);
+
+function saveCart() {
+  try { localStorage.setItem('carrito', JSON.stringify([...order.entries()])); } catch {}
+  const n = cartCount();
+  const badge = $('cart-count');
+  badge.hidden = !n;
+  badge.textContent = n > 99 ? '99+' : String(n);
+  $('cart-btn').setAttribute('aria-label', n ? `Carrito, ${plural(n, 'producto', 'productos')}` : 'Carrito');
+}
+
+// Fija la cantidad de un producto sin pasar de lo disponible. Devuelve la cantidad que quedó.
+function setQty(item, n) {
+  const v = Math.max(0, Math.min(item.disponible, Number.isFinite(n) ? Math.floor(n) : 0));
+  if (v) order.set(item.codigo, v);
+  else order.delete(item.codigo);
+  saveCart();
+  return v;
+}
+
+// Al llegar el catálogo: fuera lo que ya no está y ninguna cantidad por encima de lo disponible.
+function syncCart() {
+  const byCode = new Map(items.map((it) => [it.codigo, it]));
+  for (const [code, n] of order) {
+    const it = byCode.get(code);
+    if (!it) order.delete(code);
+    else if (n > it.disponible) order.set(code, it.disponible);
+  }
+  saveCart();
+}
+
+let toastTimer = 0;
+function toast(text, action) {
+  const box = $('toast');
+  box.replaceChildren(withIcon(el('span', null, text), 'check'));
+  if (action) box.append(link(action[1], 'toast-link', action[0]));
+  box.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { box.hidden = true; }, 3200);
+}
+
+function addToCart(item) {
+  const before = order.get(item.codigo) || 0;
+  const now = setQty(item, before + 1);
+  if (now === before) toast(`Ya tienes todas las unidades disponibles (${number.format(item.disponible)})`, ['Ver carrito', '#/carrito']);
+  else toast(`Agregado: ${item.nombre}`, ['Ver carrito', '#/carrito']);
+  if (parseRoute().page === 'precios') render();
+}
+
+function addButton(item, className = 'btn add-btn') {
+  const btn = el('button', className);
+  btn.type = 'button';
+  btn.setAttribute('aria-label', `Agregar ${item.nombre} al carrito`);
+  btn.title = 'Agregar al carrito';
+  btn.append(icon('cart', 'ico'));
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    addToCart(item);
+  });
+  return btn;
+}
+
 /* ---------- Dirección (#/página?param=valor) ---------- */
 
 function parseRoute() {
@@ -172,10 +244,12 @@ function productCard(item) {
   body.append(withIcon(el('span', `badge ${kind}`, label), 'box'));
   const price = priceText(item);
   body.append(price ? el('p', 'price', price) : el('p', 'price none', 'Consultar precio'));
-  const btn = withIcon(el('button', 'btn btn-outline btn-block', 'Ver detalles'), 'arrow', true);
+  const btn = withIcon(el('button', 'btn btn-outline', 'Ver detalles'), 'arrow', true);
   btn.type = 'button';
   btn.addEventListener('click', () => showDetail(item));
-  body.append(btn);
+  const row = el('div', 'card-actions');
+  row.append(btn, addButton(item));
+  body.append(row);
   li.append(body);
   return li;
 }
@@ -228,6 +302,19 @@ function showDetail(item) {
   stock.className = `badge ${kind}`;
   stock.textContent = label;
   $('detail-code').textContent = item.codigo ? `Cód. ${item.codigo}` : '';
+  const add = $('detail-add');
+  const addLabel = () => {
+    const n = order.get(item.codigo) || 0;
+    add.textContent = n ? `En el carrito: ${number.format(n)} · Agregar otro` : 'Agregar al carrito';
+    add.disabled = n >= item.disponible;
+    if (add.disabled) add.textContent = `En el carrito: ${number.format(n)} (todo lo disponible)`;
+  };
+  addLabel();
+  add.onclick = () => {
+    setQty(item, (order.get(item.codigo) || 0) + 1);
+    addLabel();
+    if (parseRoute().page === 'precios' || parseRoute().page === 'carrito') render();
+  };
   const wa = $('detail-whatsapp');
   wa.hidden = !CONTACT.whatsapp;
   if (CONTACT.whatsapp) wa.href = waLink(`Hola, me interesa: ${item.nombre}${item.codigo ? ` (${item.codigo})` : ''}`);
@@ -544,15 +631,38 @@ function orderTotal(lines, cur) {
   return lines.reduce((s, [it, n]) => s + (it[cur] ?? 0) * n, 0);
 }
 
-function orderText() {
+const hasPrice = (it, cur) => it[cur] !== null && it[cur] !== undefined;
+
+// Texto del pedido tal como llega por WhatsApp. `datos` = lo que el cliente llenó al confirmar.
+function orderText(datos) {
   const lines = orderLines();
   const cur = currency.value;
   const rows = lines.map(([it, n]) => {
-    const unit = it[cur];
-    const price = unit !== null && unit !== undefined ? ` — ${FORMATS[cur].format(unit)} c/u` : '';
+    const price = hasPrice(it, cur) ? ` — ${FORMATS[cur].format(it[cur])} c/u` : ' — precio por confirmar';
     return `• ${n} x ${it.nombre}${it.codigo ? ` (${it.codigo})` : ''}${price}`;
   });
-  return `Hola, quiero cotizar:\n${rows.join('\n')}\n\nTotal aproximado: ${FORMATS[cur].format(orderTotal(lines, cur))}`;
+  const out = [datos ? `Hola, quiero hacer este pedido (${datos.numero}):` : 'Hola, quiero cotizar:', ...rows, ''];
+  out.push(`Total aproximado: ${FORMATS[cur].format(orderTotal(lines, cur))}`);
+  if (lines.some(([it]) => !hasPrice(it, cur))) out.push('(sin contar los productos con precio por confirmar)');
+  if (datos) {
+    out.push('', `Nombre: ${datos.nombre}`, `Teléfono: ${datos.telefono}`);
+    if (datos.entrega) out.push(`Entrega: ${datos.entrega}`);
+    if (datos.direccion) out.push(`Dirección: ${datos.direccion}`);
+    if (datos.pago) out.push(`Pago: ${datos.pago}`);
+    if (datos.notas) out.push(`Notas: ${datos.notas}`);
+  }
+  return out.join('\n');
+}
+
+async function copyText(btn, text, label) {
+  const span = btn.lastChild;
+  try {
+    await navigator.clipboard.writeText(text);
+    span.textContent = '¡Copiado!';
+    setTimeout(() => { span.textContent = label; }, 1800);
+  } catch {
+    window.prompt('Copia tu pedido:', text);
+  }
 }
 
 function stepper(it, onChange) {
@@ -574,9 +684,7 @@ function stepper(it, onChange) {
   plus.append(icon('plus'));
   const set = (n) => {
     // No se puede pedir más de lo que hay.
-    const v = Math.max(0, Math.min(it.disponible, Number.isFinite(n) ? Math.floor(n) : 0));
-    if (v) order.set(it.codigo, v);
-    else order.delete(it.codigo);
+    const v = setQty(it, n);
     input.value = String(v);
     box.classList.toggle('active', v > 0);
     onChange();
@@ -594,7 +702,7 @@ function pagePrices() {
   const head = el('div', 'prices-head');
   head.append(
     el('h1', null, 'Lista de precios'),
-    el('p', 'muted', CONTACT.whatsapp ? 'Marca la cantidad y cotiza por WhatsApp.' : 'Marca la cantidad y copia tu pedido para enviárnoslo.'),
+    el('p', 'muted', 'Marca la cantidad de cada producto y revisa tu pedido en el carrito.'),
   );
   const tabs = el('div', 'tabs');
   const search = el('input', 'input');
@@ -611,37 +719,19 @@ function pagePrices() {
   const bar = el('div', 'order-bar');
   const barInner = el('div', 'order-inner wrap');
   const summary = el('div', 'order-summary');
-  const copyBtn = withIcon(el('button', 'btn btn-outline', 'Copiar pedido'), 'copy');
-  copyBtn.type = 'button';
-  const waBtn = withIcon(link('#', 'btn btn-wa', 'Cotizar por WhatsApp'), 'chat');
-  waBtn.target = '_blank';
-  waBtn.rel = 'noopener';
+  const cartLink = withIcon(link('#/carrito', 'btn', 'Ir al carrito'), 'arrow', true);
   const actions = el('div', 'order-actions');
-  actions.append(copyBtn);
-  if (CONTACT.whatsapp) actions.append(waBtn);
+  actions.append(cartLink);
   barInner.append(summary, actions);
   bar.append(barInner);
   wrap.append(bar);
-
-  copyBtn.addEventListener('click', async () => {
-    const label = copyBtn.lastChild;
-    try {
-      await navigator.clipboard.writeText(orderText());
-      label.textContent = '¡Copiado!';
-      setTimeout(() => { label.textContent = 'Copiar pedido'; }, 1800);
-    } catch {
-      window.prompt('Copia tu pedido:', orderText());
-    }
-  });
 
   function updateBar() {
     const lines = orderLines();
     const qty = lines.reduce((s, [, n]) => s + n, 0);
     const cur = currency.value;
     summary.replaceChildren(el('span', null, `Cantidad: ${number.format(qty)}`), el('strong', null, `Total: ${FORMATS[cur].format(orderTotal(lines, cur))}`));
-    copyBtn.disabled = !qty;
-    waBtn.classList.toggle('disabled', !qty);
-    waBtn.href = qty && CONTACT.whatsapp ? waLink(orderText()) : '#';
+    cartLink.classList.toggle('disabled', !qty);
   }
 
   function draw() {
@@ -720,6 +810,312 @@ function pagePrices() {
   search.addEventListener('input', () => { priceTerm = search.value; draw(); });
   draw();
   return wrap;
+}
+
+/* ---------- Carrito ---------- */
+
+const pad = (n) => String(n).padStart(2, '0');
+function orderNumber() {
+  const d = new Date();
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase().padEnd(4, '0');
+  return `MN-${String(d.getFullYear()).slice(2)}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${rand}`;
+}
+
+function readClient() {
+  try {
+    const c = JSON.parse(localStorage.getItem('cliente') || '{}');
+    return c && typeof c === 'object' ? c : {};
+  } catch {
+    return {};
+  }
+}
+
+function pageCart() {
+  const wrap = el('div', 'cart-page wrap');
+  wrap.append(el('h1', null, 'Tu carrito'));
+  const lines = orderLines();
+
+  if (!lines.length) {
+    if (order.size && !items.length && !loadError) {
+      wrap.append(el('p', 'status', 'Cargando tu carrito…'));
+      return wrap;
+    }
+    const empty = el('div', 'cart-empty');
+    const ic = el('span', 'cart-empty-icon');
+    ic.append(icon('cart'));
+    const btns = el('div', 'cta-btns');
+    btns.append(withIcon(link('#/productos', 'btn', 'Ver productos'), 'arrow', true), withIcon(link('#/precios', 'btn btn-outline', 'Lista de precios'), 'list'));
+    empty.append(ic, el('h2', null, 'Tu carrito está vacío'), el('p', 'muted', 'Agrega productos desde el catálogo o la lista de precios.'), btns);
+    wrap.append(empty);
+    return wrap;
+  }
+
+  const grid = el('div', 'cart-grid');
+  const list = el('ul', 'cart-list');
+  const side = el('aside', 'cart-side');
+  grid.append(list, side);
+  wrap.append(grid);
+
+  const cur = currency.value;
+  const totals = el('dl', 'cart-totals');
+  const subtotals = new Map();
+  function updateTotals() {
+    const now = orderLines();
+    if (now.length !== lines.length) return render();
+    for (const [it, n] of now) {
+      const sub = subtotals.get(it.codigo);
+      if (sub) sub.textContent = hasPrice(it, cur) ? FORMATS[cur].format(it[cur] * n) : 'Por confirmar';
+    }
+    const qty = now.reduce((s, [, n]) => s + n, 0);
+    const rows = [
+      ['Productos', number.format(qty)],
+      ['Total aproximado', FORMATS[cur].format(orderTotal(now, cur))],
+    ];
+    totals.replaceChildren(
+      ...rows.map(([k, v]) => {
+        const div = el('div');
+        div.append(el('dt', null, k), el('dd', null, v));
+        return div;
+      }),
+    );
+  }
+
+  for (const [it] of lines) {
+    const li = el('li', 'cart-line');
+    const photo = el('button', 'cart-photo');
+    photo.type = 'button';
+    photo.setAttribute('aria-label', `Ver ${it.nombre}`);
+    photoInto(photo, it);
+    photo.addEventListener('click', () => showDetail(it));
+    const info = el('div', 'cart-info');
+    info.append(
+      el('span', 'cart-name', it.nombre),
+      el('span', 'prow-code', [it.codigo, categoryOf(it)].filter(Boolean).join(' · ')),
+      el('span', 'cart-unit', hasPrice(it, cur) ? `${FORMATS[cur].format(it[cur])} c/u` : 'Precio por confirmar'),
+    );
+    const sub = el('strong', 'cart-sub');
+    subtotals.set(it.codigo, sub);
+    const remove = el('button', 'icon-btn');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Quitar ${it.nombre} del carrito`);
+    remove.title = 'Quitar';
+    remove.append(icon('trash'));
+    remove.addEventListener('click', () => { setQty(it, 0); render(); });
+    li.append(photo, info, stepper(it, updateTotals), sub, remove);
+    list.append(li);
+  }
+
+  const card = el('div', 'cart-card');
+  card.append(el('h2', null, 'Resumen'), totals);
+  if (cur !== 'precio') card.append(el('p', 'small muted', 'Montos calculados con la tasa del día de cada producto.'));
+  const clear = el('button', 'link-more', 'Vaciar carrito');
+  clear.type = 'button';
+  clear.addEventListener('click', () => {
+    order.clear();
+    saveCart();
+    render();
+  });
+  card.append(clear);
+  side.append(card, checkoutForm());
+  updateTotals();
+  return wrap;
+}
+
+function checkoutForm() {
+  const box = el('div', 'cart-card');
+  const form = el('form', 'contact-form');
+  const client = readClient();
+  const field = (label, control) => {
+    const l = el('label', 'field');
+    l.append(el('span', null, label), control);
+    return l;
+  };
+  const input = (props) => Object.assign(el('input', 'input'), props);
+  const nombre = input({ required: true, placeholder: 'Nombre y apellido', autocomplete: 'name', maxLength: 80, value: client.nombre || '' });
+  const telefono = input({ required: true, type: 'tel', placeholder: 'Ej. 0412 123 4567', autocomplete: 'tel', maxLength: 30, value: client.telefono || '' });
+  form.append(field('Nombre *', nombre), field('Teléfono *', telefono));
+
+  let entrega = '';
+  const direccion = el('textarea', 'input');
+  direccion.rows = 2;
+  direccion.maxLength = 200;
+  direccion.placeholder = 'Ciudad, sector, calle y punto de referencia';
+  const dirField = field('Dirección de envío *', direccion);
+  const needsAddress = (v) => /env[ií]o|domicilio|delivery/i.test(v);
+  if (Array.isArray(PEDIDOS.entrega) && PEDIDOS.entrega.length) {
+    const group = el('fieldset', 'choice');
+    group.append(el('legend', null, 'Entrega'));
+    PEDIDOS.entrega.forEach((opt, i) => {
+      const l = el('label', 'choice-opt');
+      const r = input({ type: 'radio', name: 'entrega', value: opt, checked: i === 0, className: '' });
+      r.addEventListener('change', () => {
+        entrega = opt;
+        dirField.hidden = !needsAddress(opt);
+        direccion.required = !dirField.hidden;
+      });
+      l.append(r, el('span', null, opt));
+      group.append(l);
+    });
+    entrega = PEDIDOS.entrega[0];
+    form.append(group);
+  }
+  dirField.hidden = !needsAddress(entrega);
+  direccion.required = !dirField.hidden;
+  form.append(dirField);
+
+  let pago = null;
+  if (Array.isArray(PEDIDOS.pago) && PEDIDOS.pago.length) {
+    pago = el('select');
+    const first = el('option', null, 'Elegir…');
+    first.value = '';
+    pago.append(first, ...PEDIDOS.pago.map((p) => { const o = el('option', null, p); o.value = p; return o; }));
+    form.append(field('Forma de pago', pago));
+  }
+  const notas = el('textarea', 'input');
+  notas.rows = 2;
+  notas.maxLength = 300;
+  notas.placeholder = 'Color, modelo, hora para retirar…';
+  form.append(field('Notas', notas));
+
+  const label = CONTACT.whatsapp ? 'Enviar pedido por WhatsApp' : 'Copiar pedido';
+  const submit = withIcon(el('button', `btn btn-block${CONTACT.whatsapp ? ' btn-wa' : ''}`, label), CONTACT.whatsapp ? 'send' : 'copy');
+  submit.type = 'submit';
+  form.append(submit);
+  if (PEDIDOS.aviso) form.append(el('p', 'small muted', PEDIDOS.aviso));
+  if (!CONTACT.whatsapp) form.append(el('p', 'small muted', 'Copia tu pedido y envíanoslo por nuestros canales de contacto.'));
+
+  box.append(el('h2', null, 'Datos para tu pedido'), form);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const datos = {
+      numero: orderNumber(),
+      nombre: nombre.value.trim(),
+      telefono: telefono.value.trim(),
+      entrega,
+      direccion: dirField.hidden ? '' : direccion.value.trim(),
+      pago: pago ? pago.value : '',
+      notas: notas.value.trim(),
+    };
+    try { localStorage.setItem('cliente', JSON.stringify({ nombre: datos.nombre, telefono: datos.telefono })); } catch {}
+    const text = orderText(datos);
+    if (CONTACT.whatsapp) window.open(waLink(text), '_blank', 'noopener');
+    else copyText(submit, text, label);
+    box.replaceChildren(sentPanel(datos, text));
+  });
+  return box;
+}
+
+// Después de enviar: el pedido sigue en el carrito hasta que el cliente lo vacíe, por si WhatsApp no abrió.
+function sentPanel(datos, text) {
+  const div = el('div', 'cart-sent');
+  const ic = el('span', 'cart-empty-icon');
+  ic.append(icon('check'));
+  div.append(
+    ic,
+    el('h2', null, `Pedido ${datos.numero}`),
+    el('p', 'muted', CONTACT.whatsapp
+      ? 'Se abrió WhatsApp con tu pedido. Envía el mensaje y te confirmamos disponibilidad y precio.'
+      : 'Tu pedido quedó copiado. Envíanoslo y te confirmamos disponibilidad y precio.'),
+  );
+  const btns = el('div', 'sent-btns');
+  if (CONTACT.whatsapp) {
+    const again = withIcon(link(waLink(text), 'btn btn-wa btn-block', 'Abrir WhatsApp de nuevo'), 'chat');
+    again.target = '_blank';
+    again.rel = 'noopener';
+    btns.append(again);
+  }
+  const copy = withIcon(el('button', 'btn btn-outline btn-block', 'Copiar pedido'), 'copy');
+  copy.type = 'button';
+  copy.addEventListener('click', () => copyText(copy, text, 'Copiar pedido'));
+  const done = el('button', 'btn btn-outline btn-block', 'Listo, vaciar carrito');
+  done.type = 'button';
+  done.addEventListener('click', () => {
+    order.clear();
+    saveCart();
+    go('productos');
+  });
+  btns.append(copy, done);
+  div.append(btns);
+  return div;
+}
+
+/* ---------- Chat ---------- */
+
+// Burbuja flotante: el cliente escribe aquí y la conversación sigue en WhatsApp.
+function setupChat() {
+  const box = $('chat');
+  if (!CONTACT.whatsapp) return;
+  const cfg = STORE.chat || {};
+  const fab = el('button', 'chat-fab');
+  fab.type = 'button';
+  fab.setAttribute('aria-label', 'Abrir chat');
+  fab.setAttribute('aria-expanded', 'false');
+  fab.setAttribute('aria-controls', 'chat-panel');
+  fab.append(icon('chat'));
+  const panel = el('section', 'chat-panel');
+  panel.id = 'chat-panel';
+  panel.hidden = true;
+  panel.setAttribute('aria-label', 'Chat con MN Technology');
+
+  const head = el('div', 'chat-head');
+  const mark = el('span', 'mark');
+  mark.append(icon('chat'));
+  const who = el('div');
+  who.append(el('strong', null, STORE.nombre), el('span', null, 'Te respondemos por WhatsApp'));
+  const close = el('button', 'chat-close');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Cerrar chat');
+  close.append(icon('close'));
+  head.append(mark, who, close);
+
+  const body = el('div', 'chat-body');
+  body.append(el('p', 'chat-bubble', cfg.saludo || '¡Hola! ¿En qué te podemos ayudar?'));
+  const form = el('form', 'chat-form');
+  const text = el('textarea', 'input');
+  text.rows = 2;
+  text.maxLength = 500;
+  text.placeholder = 'Escribe tu mensaje…';
+  text.setAttribute('aria-label', 'Mensaje');
+  if (Array.isArray(cfg.sugerencias) && cfg.sugerencias.length) {
+    const chips = el('div', 'chat-chips');
+    for (const sug of cfg.sugerencias) {
+      const c = el('button', 'chip', sug);
+      c.type = 'button';
+      c.addEventListener('click', () => { text.value = sug; text.focus(); });
+      chips.append(c);
+    }
+    body.append(chips);
+  }
+  const send = el('button', 'chat-send');
+  send.type = 'submit';
+  send.setAttribute('aria-label', 'Enviar por WhatsApp');
+  send.append(icon('send'));
+  form.append(text, send);
+  panel.append(head, body, form);
+  box.append(panel, fab);
+  box.hidden = false;
+
+  const toggle = (open) => {
+    panel.hidden = !open;
+    fab.setAttribute('aria-expanded', String(open));
+    box.classList.toggle('open', open);
+    if (open) text.focus();
+  };
+  fab.addEventListener('click', () => toggle(panel.hidden));
+  close.addEventListener('click', () => { toggle(false); fab.focus(); });
+  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') { toggle(false); fab.focus(); } });
+  text.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const msg = text.value.trim();
+    if (!msg) return text.focus();
+    window.open(waLink(msg), '_blank', 'noopener');
+    text.value = '';
+    toggle(false);
+  });
 }
 
 /* ---------- Nosotros ---------- */
@@ -881,14 +1277,17 @@ function fillFooter() {
   $('foot-contact').hidden = false;
 }
 
-const PAGES = { inicio: pageHome, productos: pageProducts, precios: pagePrices, nosotros: pageAbout, contacto: pageContact };
-const TITLES = { inicio: 'Tienda de tecnología', productos: 'Productos', precios: 'Lista de precios', nosotros: 'Nosotros', contacto: 'Contacto' };
+const PAGES = { inicio: pageHome, productos: pageProducts, precios: pagePrices, carrito: pageCart, nosotros: pageAbout, contacto: pageContact };
+const TITLES = { inicio: 'Tienda de tecnología', productos: 'Productos', precios: 'Lista de precios', carrito: 'Carrito', nosotros: 'Nosotros', contacto: 'Contacto' };
 let lastPage = '';
 
 function render() {
   const { page, params } = parseRoute();
   const name = PAGES[page] ? page : 'inicio';
   app.dataset.page = name;
+  document.body.dataset.page = name;
+  if (name === 'carrito') $('cart-btn').setAttribute('aria-current', 'page');
+  else $('cart-btn').removeAttribute('aria-current');
   app.replaceChildren(PAGES[name](params));
   for (const a of document.querySelectorAll('.nav a')) {
     if (a.dataset.route === name) a.setAttribute('aria-current', 'page');
@@ -936,8 +1335,11 @@ async function load() {
     loadError = true;
   }
   buildBrandNames();
+  if (!loadError) syncCart();
   fillFooter();
   render();
 }
 
+saveCart();
+setupChat();
 load();

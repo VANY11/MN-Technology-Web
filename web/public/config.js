@@ -11,6 +11,19 @@ export const STORE = {
     horario: '',
   },
 
+  // Carrito: cómo se entrega y cómo se paga (opciones del formulario de pedido). Lista vacía = no se pregunta.
+  pedidos: {
+    entrega: ['Retiro en tienda', 'Envío a domicilio'],
+    pago: ['Efectivo (USD)', 'Pago móvil', 'Transferencia', 'Zelle', 'Binance'],
+    aviso: 'Te confirmamos disponibilidad, precio y forma de entrega por WhatsApp antes de cobrar.',
+  },
+
+  // Burbuja de chat (abre WhatsApp). Solo aparece si hay número de WhatsApp.
+  chat: {
+    saludo: '¡Hola! ¿En qué te podemos ayudar?',
+    sugerencias: ['¿Tienen disponible…?', '¿Qué formas de pago aceptan?', '¿Hacen envíos?', 'Quiero hablar con un asesor'],
+  },
+
   // Franja de la portada. Se pueden agregar, p. ej., envíos o garantía cuando apliquen.
   // {productos} y {categorias} se reemplazan por los números del catálogo.
   ventajas: [
