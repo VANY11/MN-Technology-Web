@@ -1,0 +1,56 @@
+// Íconos de categoría (trazos al estilo Lucide, licencia ISC). Se eligen por palabras del nombre
+// de la categoría, así una categoría nueva creada en el sistema MN Tech recibe un ícono sin tocar la web.
+const ICONS = {
+  all: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>',
+  phone: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>',
+  audio: '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/>',
+  charger: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+  storage: '<path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01M10 16h.01"/>',
+  gaming: '<rect x="2" y="6" width="20" height="12" rx="4"/><path d="M6 12h4M8 10v4M15 13h.01M18 11h.01"/>',
+  mouse: '<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/>',
+  plug: '<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/>',
+  car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  laptop: '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  watch: '<circle cx="12" cy="12" r="6"/><path d="M12 10v2l1 1M16.13 7.66l-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05M7.88 16.36l.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  screen: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  wifi: '<path d="M12 20h.01M2 8.82a15 15 0 0 1 20 0M5 12.86a10 10 0 0 1 14 0M8.5 16.43a5 5 0 0 1 7 0"/>',
+  tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/>',
+  box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/>',
+};
+
+// El primer grupo de palabras que aparezca en el nombre decide el ícono.
+const RULES = [
+  [/gam|consola|control|play/, 'gaming'],
+  [/audio|aud[ií]fono|corneta|parlante|sonido|micr[oó]fono/, 'audio'],
+  [/c[aá]mara|vigilancia|seguridad/, 'camera'],
+  [/cargador|energ|bater|power/, 'charger'],
+  [/almacen|memoria|disco|pendrive|\busb\b|sd\b/, 'storage'],
+  [/perif|teclado|mouse|rat[oó]n/, 'mouse'],
+  [/adaptador|cable|conector|hub/, 'plug'],
+  [/veh[ií]cul|carro|auto|moto/, 'car'],
+  [/laptop|computad|\bpc\b|port[aá]til|tablet/, 'laptop'],
+  [/reloj|watch|smartband/, 'watch'],
+  [/case|forro|protector|estuche|funda|vidrio/, 'shield'],
+  [/\btv\b|monitor|pantalla|televis|proyector/, 'screen'],
+  [/\bred(es)?\b|wifi|router|internet|antena/, 'wifi'],
+  [/repuesto|herramienta|servicio|taller/, 'tool'],
+  [/tel[eé]f|celular|smartphone|m[oó]vil/, 'phone'],
+];
+
+export function iconFor(name) {
+  if (!name) return 'all';
+  const n = name.toLowerCase();
+  for (const [re, key] of RULES) if (re.test(n)) return key;
+  return 'box';
+}
+
+export function icon(key, className) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  if (className) svg.setAttribute('class', className);
+  svg.innerHTML = ICONS[key] || ICONS.box;
+  return svg;
+}

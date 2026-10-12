@@ -4,37 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MN Technology · Catálogo</title>
-  <meta name="description" content="Catálogo y disponibilidad de productos de MN Technology.">
+  <meta name="description" content="Catálogo y disponibilidad de productos de MN Technology: teléfonos, accesorios, audio, cámaras y más.">
+  <meta name="theme-color" content="#0c0a18">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" defer></script>
+  <script type="module" src="/app.js"></script>
 </head>
 <body>
   <header class="top">
     <div class="wrap top-inner">
-      <a class="brand" href="/">MN <span>Technology</span></a>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="hero">
-      <h1>Catálogo</h1>
-      <p>Disponibilidad actualizada desde nuestro inventario.</p>
-    </section>
-
-    <div class="tools">
+      <a class="brand" href="/" aria-label="MN Technology, inicio">
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64"><path d="M8 50V14h8l16 21 16-21h8v36h-9V30L32 48 17 30v20z" fill="#fff"/></svg>
+        </span>
+        <span class="brand-text">MN <span>Technology</span></span>
+      </a>
       <label class="search">
-        <span class="sr-only">Buscar</span>
-        <input id="q" type="search" placeholder="Buscar por nombre, marca o modelo" autocomplete="off">
-      </label>
-      <label class="category">
-        <span class="sr-only">Categoría</span>
-        <select id="category">
-          <option value="">Todas las categorías</option>
-        </select>
-      </label>
-      <label class="toggle">
-        <input id="only-stock" type="checkbox" checked>
-        Solo disponibles
+        <span class="sr-only">Buscar productos</span>
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Buscar productos, marcas o modelos" autocomplete="off">
       </label>
       <label class="currency">
         <span class="sr-only">Moneda</span>
@@ -45,13 +36,72 @@
         </select>
       </label>
     </div>
+  </header>
 
-    <p id="status" class="status" role="status">Cargando catálogo…</p>
-    <ul id="grid" class="grid" aria-live="polite"></ul>
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div>
+        <p class="eyebrow">Catálogo en línea</p>
+        <h1>Tecnología disponible <span>hoy</span></h1>
+        <p class="lead">Precios y existencias actualizados directamente desde nuestro inventario.</p>
+      </div>
+      <dl class="stats">
+        <div><dt>Productos</dt><dd id="stat-products">–</dd></div>
+        <div><dt>Categorías</dt><dd id="stat-categories">–</dd></div>
+        <div><dt>Unidades</dt><dd id="stat-units">–</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <main class="wrap layout">
+    <aside class="side" aria-label="Categorías">
+      <h2 class="side-title">Categorías</h2>
+      <nav id="categories" class="cats"></nav>
+    </aside>
+
+    <section class="content">
+      <div class="toolbar">
+        <div>
+          <h2 id="view-title" class="view-title">Todos los productos</h2>
+          <p id="view-count" class="view-count" aria-live="polite"></p>
+        </div>
+        <label class="sort">
+          <span class="sr-only">Ordenar</span>
+          <select id="sort">
+            <option value="nombre">Nombre (A–Z)</option>
+            <option value="precio-asc">Precio: menor a mayor</option>
+            <option value="precio-desc">Precio: mayor a menor</option>
+            <option value="stock">Más disponibles</option>
+          </select>
+        </label>
+      </div>
+
+      <p id="status" class="status" role="status">Cargando catálogo…</p>
+      <ul id="grid" class="grid"></ul>
+      <div class="more-wrap"><button id="more" class="btn" type="button" hidden>Ver más productos</button></div>
+    </section>
   </main>
 
+  <dialog id="detail" class="detail" aria-labelledby="detail-name">
+    <button class="close" type="button" data-close aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="detail-photo" id="detail-photo"></div>
+    <div class="detail-body">
+      <p class="cat" id="detail-cat"></p>
+      <h2 id="detail-name"></h2>
+      <p class="meta" id="detail-meta"></p>
+      <ul class="chips" id="detail-specs"></ul>
+      <dl class="prices" id="detail-prices"></dl>
+      <p class="detail-foot"><span id="detail-stock" class="stock"></span><span class="code" id="detail-code"></span></p>
+    </div>
+  </dialog>
+
   <footer class="foot">
-    <div class="wrap">© <span id="year"></span> MN Technology</div>
+    <div class="wrap foot-inner">
+      <span>© <span id="year"></span> MN Technology</span>
+      <span>Precios y disponibilidad sujetos a cambio sin previo aviso.</span>
+    </div>
   </footer>
 </body>
 </html>
