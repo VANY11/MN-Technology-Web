@@ -27,7 +27,10 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
     try {
       const upstream = await fetchPhoto(new URL(path, photoOrigin), { redirect: 'error' });
       const type = (upstream.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
-      if (!upstream.ok || !PHOTO_TYPES.test(type)) return send(res, 404, { error: 'Sin foto' });
+      if (!upstream.ok || !PHOTO_TYPES.test(type)) {
+        log.error(`Foto rechazada ${path}: HTTP ${upstream.status} ${type || 'sin Content-Type'}`);
+        return send(res, 404, { error: 'Sin foto' });
+      }
       const body = Buffer.from(await upstream.arrayBuffer());
       if (body.length > MAX_PHOTO_BYTES) return send(res, 404, { error: 'Sin foto' });
       res.writeHead(200, {
