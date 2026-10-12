@@ -11,7 +11,7 @@
 // GET /api/pedido dice si los pedidos están activos; sin esas variables la web ofrece WhatsApp o copiar el pedido.
 
 const MAX_BYTES = 20000;
-const CAMPOS = { nombre: 80, telefono: 30, entrega: 60, direccion: 200, pago: 60, notas: 300 };
+const CAMPOS = { nombre: 80, telefono: 30, cedula: 20, entrega: 60, direccion: 200, pago: 60, notas: 300 };
 
 const json = (body, status) =>
   new Response(JSON.stringify(body), {

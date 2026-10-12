@@ -647,7 +647,9 @@ function orderText(datos) {
   out.push(`Total aproximado: ${FORMATS[cur].format(orderTotal(lines, cur))}`);
   if (lines.some(([it]) => !hasPrice(it, cur))) out.push('(sin contar los productos con precio por confirmar)');
   if (datos) {
-    out.push('', `Nombre: ${datos.nombre}`, `Teléfono: ${datos.telefono}`);
+    out.push('', `Nombre: ${datos.nombre}`);
+    if (datos.cedula) out.push(`Cédula: ${datos.cedula}`);
+    out.push(`Teléfono: ${datos.telefono}`);
     if (datos.entrega) out.push(`Entrega: ${datos.entrega}`);
     if (datos.direccion) out.push(`Dirección: ${datos.direccion}`);
     if (datos.pago) out.push(`Pago: ${datos.pago}`);
@@ -935,7 +937,10 @@ function checkoutForm() {
   const input = (props) => Object.assign(el('input', 'input'), props);
   const nombre = input({ required: true, placeholder: 'Nombre y apellido', autocomplete: 'name', maxLength: 80, value: client.nombre || '' });
   const telefono = input({ required: true, type: 'tel', placeholder: 'Ej. 0412 123 4567', autocomplete: 'tel', maxLength: 30, value: client.telefono || '' });
-  form.append(field('Nombre *', nombre), field('Teléfono *', telefono));
+  const cedula = input({ required: true, placeholder: 'Ej. V12345678', autocomplete: 'off', maxLength: 20, value: client.cedula || '' });
+  const pair = el('div', 'two');
+  pair.append(field('Cédula *', cedula), field('Teléfono *', telefono));
+  form.append(field('Nombre *', nombre), pair);
 
   let entrega = '';
   const direccion = el('textarea', 'input');
@@ -1005,12 +1010,13 @@ function checkoutForm() {
       numero: orderNumber(),
       nombre: nombre.value.trim(),
       telefono: telefono.value.trim(),
+      cedula: cedula.value.trim(),
       entrega,
       direccion: dirField.hidden ? '' : direccion.value.trim(),
       pago: pago ? pago.value : '',
       notas: notas.value.trim(),
     };
-    try { localStorage.setItem('cliente', JSON.stringify({ nombre: datos.nombre, telefono: datos.telefono })); } catch {}
+    try { localStorage.setItem('cliente', JSON.stringify({ nombre: datos.nombre, telefono: datos.telefono, cedula: datos.cedula })); } catch {}
     if (online) return sendOrder(datos);
     const text = orderText(datos);
     if (CONTACT.whatsapp) window.open(waLink(text), '_blank', 'noopener');
@@ -1033,7 +1039,7 @@ function checkoutForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          nombre: datos.nombre, telefono: datos.telefono, entrega: datos.entrega, direccion: datos.direccion,
+          nombre: datos.nombre, telefono: datos.telefono, cedula: datos.cedula, entrega: datos.entrega, direccion: datos.direccion,
           pago: datos.pago, notas: datos.notas, moneda: CURRENCY_CODES[cur], sitio: trap.value,
           items: lines.map(([it, n]) => ({ codigo: it.codigo, cantidad: n })),
         }),
