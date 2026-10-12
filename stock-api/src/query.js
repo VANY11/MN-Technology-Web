@@ -6,7 +6,7 @@ export const STOCK_SQL = `
   SELECT code, name, brand, model, color, ram, storage,
          price, price_ves, price_cop, stock, foto_url
   FROM mnstore_products
-  WHERE is_active AND publicado AND NOT maranet_only
+  WHERE is_active AND NOT maranet_only AND stock > 0
   ORDER BY name
 `;
 

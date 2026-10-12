@@ -8,7 +8,7 @@ Cloudflare Access; nunca se abre un puerto en el router.
 - Lee la base propia `mn_technology`, nunca las tablas `mnstore_*` de MaraNet.
 - Entra con el rol `mnstock`, que solo puede leer las columnas públicas de `mnstore_products`
   y además tiene todas sus transacciones en modo solo lectura.
-- Muestra solo productos con `is_active`, `publicado` y que no sean `maranet_only`.
+- Muestra solo productos activos (`is_active`), con stock mayor que 0 y que no sean `maranet_only`.
 - Nunca devuelve `cost`, `imei`, `serial_number`, `supplier_id` ni `maranet_stock`.
 
 ## Respuesta

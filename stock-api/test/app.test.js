@@ -44,14 +44,14 @@ test('GET /stock devuelve solo los campos públicos', async () => {
   });
 });
 
-test('la consulta solo lee columnas públicas de productos publicados', async () => {
+test('la consulta solo lee columnas públicas de productos activos con stock', async () => {
   let seen;
   await withServer(async (sql) => { seen = sql; return { rows: [] }; }, async (base) => {
     await fetch(`${base}/stock`);
   });
   assert.match(seen, /^\s*SELECT/i);
   assert.match(seen, /FROM mnstore_products/);
-  assert.match(seen, /is_active AND publicado AND NOT maranet_only/);
+  assert.match(seen, /is_active AND NOT maranet_only AND stock > 0/);
   assert.doesNotMatch(seen, /\b(cost|imei|serial_number|supplier_id|maranet_stock)\b/);
   assert.doesNotMatch(seen, /INSERT|UPDATE|DELETE|mnstore_serials/i);
 });
