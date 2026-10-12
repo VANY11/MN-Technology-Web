@@ -18,27 +18,41 @@ async function withServer(query, fn) {
 test('GET /stock devuelve solo los campos públicos', async () => {
   const query = async () => ({
     rows: [
-      { sku: 'LAP-001', name: 'Laptop 14', price: '549.00', stock: 7, cost: '400.00' },
-      { sku: 'MON-024', name: 'Monitor 24', price: '159.00', stock: -2 },
+      {
+        code: 'LAP-001', name: 'Laptop 14', brand: 'Lenovo', model: 'IdeaPad', color: null,
+        ram: '16GB', storage: '512GB', price: '549.00', price_ves: null, price_cop: '2200000.00',
+        stock: 7, foto_url: 'https://x/l.jpg', cost: '400.00', imei: '123',
+      },
+      { code: 'MON-024', name: 'Monitor 24', price: '159.00', stock: -2 },
     ],
   });
   await withServer(query, async (base) => {
     const res = await fetch(`${base}/stock`);
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), [
-      { sku: 'LAP-001', nombre: 'Laptop 14', precio: 549, disponible: 7 },
-      { sku: 'MON-024', nombre: 'Monitor 24', precio: 159, disponible: 0 },
+      {
+        codigo: 'LAP-001', nombre: 'Laptop 14', marca: 'Lenovo', modelo: 'IdeaPad', color: null,
+        ram: '16GB', almacenamiento: '512GB', precio: 549, precio_ves: null, precio_cop: 2200000,
+        disponible: 7, foto: 'https://x/l.jpg',
+      },
+      {
+        codigo: 'MON-024', nombre: 'Monitor 24', marca: null, modelo: null, color: null,
+        ram: null, almacenamiento: null, precio: 159, precio_ves: null, precio_cop: null,
+        disponible: 0, foto: null,
+      },
     ]);
   });
 });
 
-test('la consulta solo lee mnstore_products', async () => {
+test('la consulta solo lee columnas públicas de productos publicados', async () => {
   let seen;
   await withServer(async (sql) => { seen = sql; return { rows: [] }; }, async (base) => {
     await fetch(`${base}/stock`);
   });
   assert.match(seen, /^\s*SELECT/i);
   assert.match(seen, /FROM mnstore_products/);
+  assert.match(seen, /is_active AND publicado AND NOT maranet_only/);
+  assert.doesNotMatch(seen, /\b(cost|imei|serial_number|supplier_id|maranet_stock)\b/);
   assert.doesNotMatch(seen, /INSERT|UPDATE|DELETE|mnstore_serials/i);
 });
 
