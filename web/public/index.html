@@ -22,10 +22,15 @@
         </span>
         <span class="brand-text">MN <span>Technology</span></span>
       </a>
+      <nav class="nav" aria-label="Secciones">
+        <a href="#categorias">Categorías</a>
+        <a href="#catalogo">Catálogo</a>
+        <a href="#contacto" class="contact-link" hidden>Contacto</a>
+      </nav>
       <label class="search">
         <span class="sr-only">Buscar productos</span>
         <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Buscar productos, marcas o modelos" autocomplete="off">
+        <input id="q" type="search" placeholder="¿Qué estás buscando?" autocomplete="off">
       </label>
       <label class="currency">
         <span class="sr-only">Moneda</span>
@@ -40,48 +45,65 @@
 
   <section class="hero">
     <div class="wrap hero-inner">
-      <div>
-        <p class="eyebrow">Catálogo en línea</p>
-        <h1>Tecnología disponible <span>hoy</span></h1>
-        <p class="lead">Precios y existencias actualizados directamente desde nuestro inventario.</p>
+      <div class="hero-copy">
+        <p class="eyebrow">MN Technology</p>
+        <h1>Tecnología para tu <span>día a día</span></h1>
+        <p class="lead">Teléfonos, accesorios, audio, cámaras y mucho más. Mira lo que tenemos disponible hoy, con precios en dólares, bolívares y pesos.</p>
+        <div class="cta">
+          <a class="btn" href="#catalogo">Ver catálogo</a>
+          <a class="btn btn-ghost" href="#categorias">Explorar categorías</a>
+        </div>
+        <ul class="trust">
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Existencias reales, al instante</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Precios en USD, Bs. y COP</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span id="trust-count">Catálogo actualizado</span></li>
+        </ul>
       </div>
-      <dl class="stats">
-        <div><dt>Productos</dt><dd id="stat-products">–</dd></div>
-        <div><dt>Categorías</dt><dd id="stat-categories">–</dd></div>
-        <div><dt>Unidades</dt><dd id="stat-units">–</dd></div>
-      </dl>
+      <div class="hero-art" aria-hidden="true">
+        <div class="orb"></div>
+        <div class="float f1" data-icon="phone"></div>
+        <div class="float f2" data-icon="audio"></div>
+        <div class="float f3" data-icon="camera"></div>
+        <div class="float f4" data-icon="charger"></div>
+      </div>
     </div>
   </section>
 
-  <main class="wrap layout">
-    <aside class="side" aria-label="Categorías">
-      <h2 class="side-title">Categorías</h2>
-      <nav id="categories" class="cats"></nav>
-    </aside>
-
-    <section class="content">
-      <div class="toolbar">
-        <div>
-          <h2 id="view-title" class="view-title">Todos los productos</h2>
-          <p id="view-count" class="view-count" aria-live="polite"></p>
-        </div>
-        <label class="sort">
-          <span class="sr-only">Ordenar</span>
-          <select id="sort">
-            <option value="nombre">Nombre (A–Z)</option>
-            <option value="precio-asc">Precio: menor a mayor</option>
-            <option value="precio-desc">Precio: mayor a menor</option>
-            <option value="stock">Más disponibles</option>
-          </select>
-        </label>
+  <section id="categorias" class="section wrap">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Categorías</p>
+        <h2>Explora por categoría</h2>
       </div>
+      <button id="all-cats" class="link-btn" type="button" hidden>Ver todas</button>
+    </div>
+    <ul id="tiles" class="tiles"></ul>
+  </section>
 
-      <div id="filters" class="filters" hidden></div>
+  <main id="catalogo" class="section wrap">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Catálogo</p>
+        <h2 id="view-title">Todos los productos</h2>
+        <p id="view-count" class="view-count" aria-live="polite"></p>
+      </div>
+      <label class="sort">
+        <span class="sr-only">Ordenar</span>
+        <select id="sort">
+          <option value="nombre">Nombre (A–Z)</option>
+          <option value="precio-asc">Precio: menor a mayor</option>
+          <option value="precio-desc">Precio: mayor a menor</option>
+          <option value="stock">Más disponibles</option>
+        </select>
+      </label>
+    </div>
 
-      <p id="status" class="status" role="status">Cargando catálogo…</p>
-      <ul id="grid" class="grid"></ul>
-      <div class="more-wrap"><button id="more" class="btn" type="button" hidden>Ver más productos</button></div>
-    </section>
+    <nav id="categories" class="cats" aria-label="Categorías del catálogo"></nav>
+    <div id="filters" class="filters" hidden></div>
+
+    <p id="status" class="status" role="status">Cargando catálogo…</p>
+    <ul id="grid" class="grid"></ul>
+    <div class="more-wrap"><button id="more" class="btn btn-ghost" type="button" hidden>Ver más productos</button></div>
   </main>
 
   <dialog id="detail" class="detail" aria-labelledby="detail-name">
@@ -97,11 +119,31 @@
       <dl class="spec-list" id="detail-spec-list"></dl>
       <dl class="prices" id="detail-prices"></dl>
       <p class="detail-foot"><span id="detail-stock" class="stock"></span><span class="code" id="detail-code"></span></p>
+      <a id="detail-whatsapp" class="btn whatsapp" target="_blank" rel="noopener" hidden>Consultar por WhatsApp</a>
     </div>
   </dialog>
 
   <footer class="foot">
-    <div class="wrap foot-inner">
+    <div class="wrap foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><path d="M8 50V14h8l16 21 16-21h8v36h-9V30L32 48 17 30v20z" fill="#fff"/></svg>
+          </span>
+          <span class="brand-text">MN <span>Technology</span></span>
+        </a>
+        <p>Tecnología, accesorios y servicio técnico. Lo que ves en este catálogo está disponible hoy en nuestra tienda.</p>
+      </div>
+      <div>
+        <h3>Categorías</h3>
+        <ul id="foot-cats" class="foot-links"></ul>
+      </div>
+      <div id="contacto" class="foot-contact" hidden>
+        <h3>Contacto</h3>
+        <ul id="contact-list" class="foot-links"></ul>
+      </div>
+    </div>
+    <div class="wrap foot-bottom">
       <span>© <span id="year"></span> MN Technology</span>
       <span>Precios y disponibilidad sujetos a cambio sin previo aviso.</span>
     </div>

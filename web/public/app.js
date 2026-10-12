@@ -11,6 +11,16 @@ const FORMATS = {
 const CURRENCY_NAMES = { precio: 'Dólares (USD)', precio_ves: 'Bolívares (Bs.)', precio_cop: 'Pesos (COP)' };
 const number = new Intl.NumberFormat('es-VE');
 
+// Datos de contacto de la tienda. Lo que quede vacío no se muestra.
+// whatsapp: número con código de país, solo dígitos (p. ej. '584121234567').
+const CONTACT = {
+  whatsapp: '',
+  instagram: '', // usuario sin @
+  direccion: '',
+  horario: '',
+};
+const TILES = 8;
+
 const $ = (id) => document.getElementById(id);
 const grid = $('grid');
 const statusEl = $('status');
@@ -153,6 +163,13 @@ function showDetail(item) {
   stock.textContent = item.disponible > LOW_STOCK ? `${label} · ${item.disponible} unidades` : label;
   $('detail-code').textContent = item.codigo ? `Cód. ${item.codigo}` : '';
 
+  const wa = $('detail-whatsapp');
+  wa.hidden = !CONTACT.whatsapp;
+  if (CONTACT.whatsapp) {
+    const text = `Hola, me interesa: ${item.nombre}${item.codigo ? ` (${item.codigo})` : ''}`;
+    wa.href = `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(text)}`;
+  }
+
   if (typeof detail.showModal === 'function') detail.showModal();
 }
 
@@ -181,26 +198,62 @@ function categoryButton(name, label, count) {
   return btn;
 }
 
-function fillCategories() {
-  const counts = countsByCategory();
+const sortedCategories = (counts) =>
   // Orden alfabético, con «Otros» (productos sin categoría) al final.
-  const names = [...counts.keys()].sort((a, b) =>
+  [...counts.keys()].sort((a, b) =>
     a === OTHERS ? 1 : b === OTHERS ? -1 : a.localeCompare(b, 'es', { sensitivity: 'base' }),
   );
+
+function tile(name, count) {
+  const li = el('li');
+  const btn = el('button', 'tile');
+  btn.type = 'button';
+  const badge = el('span', 'tile-icon');
+  badge.append(icon(name === OTHERS ? 'box' : iconFor(name)));
+  // Permite cortar «Cámaras/Videovigilancia» después de la barra.
+  btn.append(badge, el('span', 'tile-name', name.replace(/\//g, '/\u200b')), el('span', 'tile-count', `${number.format(count)} ${count === 1 ? 'producto' : 'productos'}`));
+  btn.addEventListener('click', () => selectCategory(name, true));
+  li.append(btn);
+  return li;
+}
+
+function fillCategories() {
+  const counts = countsByCategory();
+  const names = sortedCategories(counts);
   catsNav.replaceChildren(
-    categoryButton('', 'Todos los productos', items.length),
+    categoryButton('', 'Todos', items.length),
     ...names.map((n) => categoryButton(n, n, counts.get(n))),
   );
   const fromUrl = new URLSearchParams(location.search).get('categoria');
   if (fromUrl && counts.has(fromUrl)) category = fromUrl;
 
-  $('stat-products').textContent = number.format(items.length);
-  $('stat-categories').textContent = number.format([...counts.keys()].filter((n) => n !== OTHERS).length);
-  $('stat-units').textContent = number.format(items.reduce((sum, it) => sum + it.disponible, 0));
+  // Tarjetas de categorías: primero las que tienen más productos.
+  const byCount = names.filter((n) => n !== OTHERS).sort((a, b) => counts.get(b) - counts.get(a));
+  const tiles = $('tiles');
+  const allBtn = $('all-cats');
+  const showTiles = (all) => {
+    tiles.replaceChildren(...(all ? byCount : byCount.slice(0, TILES)).map((n) => tile(n, counts.get(n))));
+    allBtn.hidden = byCount.length <= TILES;
+    allBtn.textContent = all ? 'Ver menos' : `Ver todas (${byCount.length})`;
+    allBtn.onclick = () => showTiles(!all);
+  };
+  showTiles(false);
+
+  $('foot-cats').replaceChildren(
+    ...byCount.slice(0, 6).map((n) => {
+      const li = el('li');
+      const a = el('a', null, n);
+      a.href = `?categoria=${encodeURIComponent(n)}#catalogo`;
+      a.addEventListener('click', (e) => { e.preventDefault(); selectCategory(n, true); });
+      li.append(a);
+      return li;
+    }),
+  );
+  $('trust-count').textContent = `${number.format(items.length)} productos disponibles`;
 }
 
 // La categoría elegida queda en la dirección (?categoria=...) para poder compartir el enlace.
-function selectCategory(name) {
+function selectCategory(name, scrollToCatalog = false) {
   category = name;
   limit = PAGE;
   specFilters = new Map();
@@ -210,10 +263,8 @@ function selectCategory(name) {
   history.replaceState(null, '', url);
   render();
   const current = catsNav.querySelector('[aria-current="true"]');
-  current?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-  if (window.matchMedia('(max-width: 900px)').matches) {
-    document.querySelector('.content').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
+  current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  if (scrollToCatalog) $('catalogo').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const normalize = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -334,6 +385,39 @@ async function load() {
   }
 }
 
+function fillContact() {
+  const rows = [
+    CONTACT.whatsapp && ['WhatsApp', `+${CONTACT.whatsapp}`, `https://wa.me/${CONTACT.whatsapp}`],
+    CONTACT.instagram && ['Instagram', `@${CONTACT.instagram}`, `https://instagram.com/${CONTACT.instagram}`],
+    CONTACT.direccion && ['Dirección', CONTACT.direccion],
+    CONTACT.horario && ['Horario', CONTACT.horario],
+  ].filter(Boolean);
+  if (!rows.length) return;
+  $('contact-list').replaceChildren(
+    ...rows.map(([label, text, href]) => {
+      const li = el('li');
+      li.append(el('span', 'foot-label', label));
+      if (href) {
+        const a = el('a', null, text);
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        li.append(a);
+      } else li.append(el('span', null, text));
+      return li;
+    }),
+  );
+  $('contacto').hidden = false;
+  document.querySelector('.contact-link').hidden = false;
+}
+
+for (const node of document.querySelectorAll('.hero-art [data-icon]')) node.append(icon(node.dataset.icon));
+fillContact();
+
+// Al buscar desde arriba, mostrar los resultados.
+q.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('catalogo').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 q.addEventListener('input', () => { limit = PAGE; render(); });
 sort.addEventListener('change', () => { limit = PAGE; render(); });
 currency.addEventListener('change', () => {
