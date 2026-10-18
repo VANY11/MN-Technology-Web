@@ -69,7 +69,21 @@
       <div class="detail-actions">
         <button id="detail-add" class="btn" type="button">Agregar al carrito</button>
         <a id="detail-whatsapp" class="btn btn-wa" target="_blank" rel="noopener" hidden>Consultar por WhatsApp</a>
+        <button id="detail-share" class="btn btn-outline" type="button">Compartir</button>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="share" class="share" aria-labelledby="share-title">
+    <button class="close" type="button" data-close aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <h2 id="share-title">Compartir producto</h2>
+    <p class="muted small" id="share-name"></p>
+    <div class="share-grid" id="share-grid"></div>
+    <div class="share-link">
+      <input id="share-url" type="text" readonly aria-label="Enlace del producto">
+      <button id="share-copy" class="btn" type="button">Copiar</button>
     </div>
   </dialog>
 
