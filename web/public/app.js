@@ -1031,11 +1031,39 @@ function checkoutForm() {
   const nombre = input({ required: true, placeholder: 'Ej. María', autocomplete: 'given-name', maxLength: 40, value: savedNombre });
   const apellido = input({ required: true, placeholder: 'Ej. González', autocomplete: 'family-name', maxLength: 40, value: savedApellido });
   const cedula = input({ required: true, placeholder: 'Ej. V12345678', autocomplete: 'off', maxLength: 20, value: client.cedula || '' });
-  const telefono = input({ required: true, type: 'tel', inputMode: 'tel', placeholder: 'Ej. 0412-1234567', autocomplete: 'tel-national', maxLength: 20, value: client.telefono || '' });
+  // Celular: prefijo en una lista y los 7 dígitos aparte.
+  const [savedPrefijo, savedNumero] = /^(0\d{3})-?(\d{7})$/.test(client.telefono || '') ? [client.telefono.slice(0, 4), client.telefono.replace(/\D/g, '').slice(4)] : ['', ''];
+  const prefijo = el('select', 'phone-prefix');
+  prefijo.setAttribute('aria-label', 'Prefijo del celular');
+  const sinPrefijo = el('option', null, 'Prefijo');
+  sinPrefijo.value = '';
+  sinPrefijo.disabled = true;
+  prefijo.append(sinPrefijo, ...PREFIJOS_CELULAR.map((p) => { const o = el('option', null, p); o.value = p; return o; }));
+  prefijo.value = PREFIJOS_CELULAR.includes(savedPrefijo) ? savedPrefijo : '';
+  const telefono = input({ required: true, type: 'tel', inputMode: 'numeric', placeholder: '1234567', autocomplete: 'off', maxLength: 16, value: savedNumero });
+  telefono.setAttribute('aria-label', 'Número del celular, 7 dígitos');
+  // Si pegan el número completo (04141234567 o +58 414…), se reparte entre la lista y el campo.
+  telefono.addEventListener('input', () => {
+    let d = telefono.value.replace(/\D/g, '');
+    if (d.startsWith('58') && d.length >= 12) d = `0${d.slice(2)}`;
+    if (d.length >= 10 && !d.startsWith('0')) d = `0${d}`;
+    if (d.length === 11 && PREFIJOS_CELULAR.includes(d.slice(0, 4))) {
+      prefijo.value = d.slice(0, 4);
+      telefono.value = d.slice(4);
+    }
+  });
+  prefijo.addEventListener('change', () => telefono.dispatchEvent(new Event('input')));
   const controls = { nombre, apellido, cedula, telefono };
   const hints = {};
   const withHint = (label, k) => {
-    const f = field(label, controls[k]);
+    let f;
+    if (k === 'telefono') {
+      // Dos controles: un <div> en vez de <label>, cada uno con su propio nombre accesible.
+      f = el('div', 'field');
+      const row = el('div', 'phone-row');
+      row.append(prefijo, telefono);
+      f.append(el('span', null, label), row);
+    } else f = field(label, controls[k]);
     hints[k] = el('small', 'field-error');
     hints[k].hidden = true;
     hints[k].id = `pedido-${k}-error`;
@@ -1048,6 +1076,7 @@ function checkoutForm() {
       const msg = errores[k] || '';
       c.setCustomValidity(msg);
       c.setAttribute('aria-invalid', msg ? 'true' : 'false');
+      if (k === 'telefono') prefijo.setAttribute('aria-invalid', msg && !prefijo.value ? 'true' : 'false');
       hints[k].textContent = msg;
       hints[k].hidden = !msg;
     }
@@ -1057,14 +1086,13 @@ function checkoutForm() {
     c.addEventListener('input', () => {
       c.setCustomValidity('');
       c.removeAttribute('aria-invalid');
+      if (k === 'telefono') prefijo.removeAttribute('aria-invalid');
       hints[k].hidden = true;
     });
   }
   const pairName = el('div', 'two');
   pairName.append(withHint('Nombre *', 'nombre'), withHint('Apellido *', 'apellido'));
-  const pairId = el('div', 'two');
-  pairId.append(withHint('Cédula *', 'cedula'), withHint('Celular *', 'telefono'));
-  form.append(pairName, pairId, el('p', 'small muted form-note', `Todos los datos son obligatorios. Celular: ${PREFIJOS_CELULAR.join(', ')}.`));
+  form.append(pairName, withHint('Cédula *', 'cedula'), withHint('Celular *', 'telefono'), el('p', 'small muted form-note', 'Todos los datos son obligatorios.'));
 
   let entrega = '';
   const direccion = el('textarea', 'input');
@@ -1131,15 +1159,18 @@ function checkoutForm() {
   form.noValidate = true;
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const revision = revisarCliente({ nombre: nombre.value, apellido: apellido.value, cedula: cedula.value, telefono: telefono.value });
+    const revision = revisarCliente({ nombre: nombre.value, apellido: apellido.value, cedula: cedula.value, telefono: `${prefijo.value}${telefono.value}` });
+    if (!prefijo.value) revision.errores = { ...revision.errores, telefono: 'Elige el prefijo de tu celular.' };
     showErrors(revision.errores);
     if (revision.errores) {
-      controls[Object.keys(revision.errores)[0]].focus();
+      const first = Object.keys(revision.errores)[0];
+      (first === 'telefono' && !prefijo.value ? prefijo : controls[first]).focus();
       return;
     }
     if (!form.checkValidity()) return form.reportValidity();
     const cli = revision.datos;
-    for (const k of Object.keys(controls)) controls[k].value = cli[k];
+    for (const k of ['nombre', 'apellido', 'cedula']) controls[k].value = cli[k];
+    telefono.value = cli.telefono.slice(5);
     const datos = {
       numero: orderNumber(),
       nombre: `${cli.nombre} ${cli.apellido}`,
