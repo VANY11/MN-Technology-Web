@@ -312,7 +312,7 @@ select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px 
 .contact-list a:hover { color: var(--brand-ink); }
 .contact-list .small { display: block; }
 .contact-form { display: grid; gap: 16px; }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .field { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
 .contact-art { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect width='120' height='120' fill='%234c1d95'/%3E%3Cpath d='M0 0h60v30H30v30H0z' fill='%238b5cf6'/%3E%3Cpath d='M60 60h60v60H90V90H60z' fill='%238b5cf6'/%3E%3Cpath d='M60 0h60L60 60z' fill='%233b82f6' opacity='.8'/%3E%3Cpath d='M0 120l60-60v60z' fill='%233b82f6' opacity='.8'/%3E%3C/svg%3E") 0 0 / 120px 120px; }
 
@@ -390,7 +390,10 @@ select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px 
 .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .form-error { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgb(220 38 38 / 0.35); background: rgb(220 38 38 / 0.08); color: #b91c1c; font-size: 14px; font-weight: 600; }
 .form-error p { margin: 0; }
-@media (prefers-color-scheme: dark) { .form-error { color: #fca5a5; } }
+.field-error { color: #b91c1c; font-size: 13px; font-weight: 600; }
+.input[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(220 38 38 / 0.15); }
+.form-note { margin: -4px 0 0; }
+@media (prefers-color-scheme: dark) { .form-error, .field-error { color: #fca5a5; } }
 .form-error .small { font-weight: 500; }
 .received { max-width: 620px; margin: 0 auto; }
 .received h1 { margin: 6px 0 0; }

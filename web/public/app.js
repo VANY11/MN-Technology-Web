@@ -1,5 +1,6 @@
 import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
+import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -852,7 +853,7 @@ function orderText(datos) {
   if (lines.some(([it]) => !hasPrice(it, cur))) out.push('(sin contar los productos con precio por confirmar)');
   if (datos) {
     out.push('', `Nombre: ${datos.nombre}`);
-    if (datos.cedula) out.push(`Cédula: ${datos.cedula}`);
+    out.push(`Cédula: ${datos.cedula}`);
     out.push(`Teléfono: ${datos.telefono}`);
     if (datos.entrega) out.push(`Entrega: ${datos.entrega}`);
     if (datos.direccion) out.push(`Dirección: ${datos.direccion}`);
@@ -1024,12 +1025,46 @@ function checkoutForm() {
     return l;
   };
   const input = (props) => Object.assign(el('input', 'input'), props);
-  const nombre = input({ required: true, placeholder: 'Nombre y apellido', autocomplete: 'name', maxLength: 80, value: client.nombre || '' });
-  const telefono = input({ required: true, type: 'tel', placeholder: 'Ej. 0412 123 4567', autocomplete: 'tel', maxLength: 30, value: client.telefono || '' });
+  // Datos guardados antes del apellido aparte: «Ana Pérez» se reparte en los dos campos.
+  let [savedNombre, savedApellido] = [client.nombre || '', client.apellido || ''];
+  if (!client.apellido && savedNombre.includes(' ')) [savedNombre, savedApellido] = [savedNombre.slice(0, savedNombre.indexOf(' ')), savedNombre.slice(savedNombre.indexOf(' ') + 1)];
+  const nombre = input({ required: true, placeholder: 'Ej. María', autocomplete: 'given-name', maxLength: 40, value: savedNombre });
+  const apellido = input({ required: true, placeholder: 'Ej. González', autocomplete: 'family-name', maxLength: 40, value: savedApellido });
   const cedula = input({ required: true, placeholder: 'Ej. V12345678', autocomplete: 'off', maxLength: 20, value: client.cedula || '' });
-  const pair = el('div', 'two');
-  pair.append(field('Cédula *', cedula), field('Teléfono *', telefono));
-  form.append(field('Nombre *', nombre), pair);
+  const telefono = input({ required: true, type: 'tel', inputMode: 'tel', placeholder: 'Ej. 0412-1234567', autocomplete: 'tel-national', maxLength: 20, value: client.telefono || '' });
+  const controls = { nombre, apellido, cedula, telefono };
+  const hints = {};
+  const withHint = (label, k) => {
+    const f = field(label, controls[k]);
+    hints[k] = el('small', 'field-error');
+    hints[k].hidden = true;
+    hints[k].id = `pedido-${k}-error`;
+    controls[k].setAttribute('aria-describedby', hints[k].id);
+    f.append(hints[k]);
+    return f;
+  };
+  const showErrors = (errores = {}) => {
+    for (const [k, c] of Object.entries(controls)) {
+      const msg = errores[k] || '';
+      c.setCustomValidity(msg);
+      c.setAttribute('aria-invalid', msg ? 'true' : 'false');
+      hints[k].textContent = msg;
+      hints[k].hidden = !msg;
+    }
+  };
+  // Al corregir un campo se quita su aviso.
+  for (const [k, c] of Object.entries(controls)) {
+    c.addEventListener('input', () => {
+      c.setCustomValidity('');
+      c.removeAttribute('aria-invalid');
+      hints[k].hidden = true;
+    });
+  }
+  const pairName = el('div', 'two');
+  pairName.append(withHint('Nombre *', 'nombre'), withHint('Apellido *', 'apellido'));
+  const pairId = el('div', 'two');
+  pairId.append(withHint('Cédula *', 'cedula'), withHint('Celular *', 'telefono'));
+  form.append(pairName, pairId, el('p', 'small muted form-note', `Todos los datos son obligatorios. Celular: ${PREFIJOS_CELULAR.join(', ')}.`));
 
   let entrega = '';
   const direccion = el('textarea', 'input');
@@ -1093,19 +1128,31 @@ function checkoutForm() {
 
   box.append(el('h2', null, 'Datos para tu pedido'), form);
 
+  form.noValidate = true;
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    const revision = revisarCliente({ nombre: nombre.value, apellido: apellido.value, cedula: cedula.value, telefono: telefono.value });
+    showErrors(revision.errores);
+    if (revision.errores) {
+      controls[Object.keys(revision.errores)[0]].focus();
+      return;
+    }
+    if (!form.checkValidity()) return form.reportValidity();
+    const cli = revision.datos;
+    for (const k of Object.keys(controls)) controls[k].value = cli[k];
     const datos = {
       numero: orderNumber(),
-      nombre: nombre.value.trim(),
-      telefono: telefono.value.trim(),
-      cedula: cedula.value.trim(),
+      nombre: `${cli.nombre} ${cli.apellido}`,
+      nombrePila: cli.nombre,
+      apellido: cli.apellido,
+      telefono: cli.telefono,
+      cedula: cli.cedula,
       entrega,
       direccion: dirField.hidden ? '' : direccion.value.trim(),
       pago: pago ? pago.value : '',
       notas: notas.value.trim(),
     };
-    try { localStorage.setItem('cliente', JSON.stringify({ nombre: datos.nombre, telefono: datos.telefono, cedula: datos.cedula })); } catch {}
+    try { localStorage.setItem('cliente', JSON.stringify({ nombre: cli.nombre, apellido: cli.apellido, telefono: cli.telefono, cedula: cli.cedula })); } catch {}
     if (online) return sendOrder(datos);
     const text = orderText(datos);
     if (CONTACT.whatsapp) window.open(waLink(text), '_blank', 'noopener');
@@ -1128,7 +1175,7 @@ function checkoutForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          nombre: datos.nombre, telefono: datos.telefono, cedula: datos.cedula, entrega: datos.entrega, direccion: datos.direccion,
+          nombre: datos.nombrePila, apellido: datos.apellido, telefono: datos.telefono, cedula: datos.cedula, entrega: datos.entrega, direccion: datos.direccion,
           pago: datos.pago, notas: datos.notas, moneda: CURRENCY_CODES[cur], sitio: trap.value,
           items: lines.map(([it, n]) => ({ codigo: it.codigo, cantidad: n })),
         }),
@@ -1146,6 +1193,7 @@ function checkoutForm() {
     submit.disabled = false;
     span.textContent = label;
     const known = res && [400, 409, 429].includes(res.status) && data?.error;
+    if (res?.status === 400 && data?.campos && typeof data.campos === 'object') showErrors(data.campos);
     errorBox.replaceChildren(el('p', null, known ? data.error : 'No pudimos enviar tu pedido en este momento. Intenta de nuevo en unos minutos.'));
     if (res?.status === 409) errorBox.append(el('p', 'small', 'Ajusta las cantidades en tu carrito y vuelve a enviarlo.'));
     if (!known && CONTACT.whatsapp) {

@@ -8,7 +8,7 @@ const env = {
   CF_ACCESS_CLIENT_ID: 'id.access',
   CF_ACCESS_CLIENT_SECRET: 'secreto',
 };
-const body = { nombre: 'Ana', telefono: '04121234567', moneda: 'VES', items: [{ codigo: 'T001', cantidad: 2 }], precio: 1 };
+const body = { nombre: 'Ana', apellido: 'Pérez', cedula: 'v-12.345.678', telefono: '0412 123 4567', moneda: 'VES', items: [{ codigo: 'T001', cantidad: 2 }], precio: 1 };
 const req = (b = body, headers = {}) =>
   new Request('https://mntechve.com/api/pedido', {
     method: 'POST',
@@ -42,6 +42,10 @@ test('reenvía el pedido con los tokens y solo los campos permitidos', async () 
   assert.equal(init.headers['X-Cliente-IP'], '1.2.3.4');
   const sent = JSON.parse(init.body);
   assert.equal(sent.precio, undefined);
+  assert.equal(sent.nombre, 'Ana Pérez');
+  assert.equal(sent.apellido, undefined);
+  assert.equal(sent.cedula, 'V12345678');
+  assert.equal(sent.telefono, '0412-1234567');
   assert.deepEqual(sent.items, [{ codigo: 'T001', cantidad: 2 }]);
 });
 
@@ -60,4 +64,13 @@ test('pasa el mensaje de stock agotado y oculta otros errores', async () => {
   assert.equal((await r1.json()).error, 'Ya no hay disponible: X');
   reply = () => new Response('<html>login</html>', { status: 302, headers: { 'Content-Type': 'text/html' } });
   assert.equal((await onRequestPost({ env, request: req() })).status, 503);
+});
+
+test('exige nombre, apellido, cédula y un celular venezolano', async () => {
+  for (const malo of [{ nombre: '' }, { apellido: '' }, { apellido: '123' }, { cedula: '' }, { cedula: 'J123' }, { telefono: '' }, { telefono: '02121234567' }, { telefono: '0413 123 4567' }, { telefono: '0412 123' }]) {
+    const res = await onRequestPost({ env, request: req({ ...body, ...malo }) });
+    assert.equal(res.status, 400, JSON.stringify(malo));
+    assert.ok((await res.json()).error);
+  }
+  assert.equal(calls.length, 0);
 });
