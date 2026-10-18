@@ -4,8 +4,8 @@
   --bg: #f6f5fb;
   --surface: #ffffff;
   --surface-2: #f1effa;
-  /* Fondo de las fotos: lila blancuzco en los dos temas (las fotos sin fondo y las de fondo blanco se ven igual). */
-  --foto-fondo: linear-gradient(160deg, #faf8ff 0%, #f1ecfc 55%, #e9e1fa 100%);
+  /* Fondo de las fotos: blanco en los dos temas, como las fotos que guarda «Quitar fondo» (blanco con marcas MN tenues): se funden con el recuadro. */
+  --foto-fondo: #fff;
   --line: #e6e3f1;
   --line-strong: #d6d1ea;
   --ink: #15122b;
