@@ -604,6 +604,62 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
   .two { grid-template-columns: 1fr; }
   .foot-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------- Efectos de ratón y clic (efectos.js) ---------- */
+/* Luz que sigue al cursor e inclinación 3D: efectos.js pone --mx/--my (luz) y --rx/--ry (giro) y la clase fx-on. */
+.card, .mini-btn { position: relative; }
+.card::after, .mini-btn::after, .mundo::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .25s;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgb(139 92 246 / 0.16), transparent 60%);
+  box-shadow: inset 0 0 0 1px rgb(139 92 246 / 0.35);
+}
+.mundo::after { z-index: -1; }
+.fx-on::after { opacity: 1; }
+.card.fx-on, .mundo.fx-on, .mini-btn.fx-on {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-4px);
+  transition: transform .08s linear, box-shadow .2s, border-color .18s;
+}
+.card.fx-on { box-shadow: 0 26px 50px -24px rgb(91 33 182 / 0.55); }
+/* Destello que barre la foto al pasar el ratón. */
+.photo::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: linear-gradient(115deg, transparent 38%, rgb(167 139 250 / 0.22) 50%, transparent 62%);
+  transform: translateX(-120%);
+}
+.card:hover .photo::after { transform: translateX(120%); transition: transform .8s ease; }
+.photo img { transition: transform .35s ease; }
+.card.fx-on .photo img { transform: scale(1.05); }
+
+/* Vitrina: los puntos del fondo se encienden alrededor del cursor y la foto se inclina hacia él. */
+.showcase::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity .4s;
+  background:
+    radial-gradient(rgb(196 181 253 / 0.95) 1.3px, transparent 1.6px) 0 0 / 22px 22px,
+    radial-gradient(380px circle at var(--sx, 50%) var(--sy, 50%), rgb(139 92 246 / 0.28), transparent 70%);
+  -webkit-mask: radial-gradient(220px circle at var(--sx, 50%) var(--sy, 50%), #000, transparent 75%);
+  mask: radial-gradient(220px circle at var(--sx, 50%) var(--sy, 50%), #000, transparent 75%);
+}
+.showcase.fx-on::after { opacity: 1; }
+.sc-photo { transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .3s ease-out; }
+
+/* Chispas al hacer clic. */
+.fx-burst { position: fixed; z-index: 1000; width: 0; height: 0; pointer-events: none; }
+.fx-burst i { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; border: 2px solid #a78bfa; box-shadow: 0 0 12px #8b5cf6; animation: fx-ring .5s ease-out forwards; }
+.fx-burst b { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 1px; background: #c4b5fd; box-shadow: 0 0 6px #8b5cf6; animation: fx-spark .55s ease-out forwards; }
+.fx-burst b:nth-child(odd) { background: #93c5fd; box-shadow: 0 0 6px #3b82f6; }
+@keyframes fx-ring { from { transform: scale(.2); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@keyframes fx-spark { from { transform: translate(0, 0) scale(1); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(.3); opacity: 0; } }
+
+/* El producto vuela al carrito y el carrito late. */
+.fx-fly { position: fixed; z-index: 1000; pointer-events: none; object-fit: contain; border-radius: 16px; background: #fff; box-shadow: 0 18px 40px -12px rgb(91 33 182 / 0.7); }
+.cart-btn.fx-bump { animation: fx-bump .5s cubic-bezier(.3, 1.6, .5, 1); }
+.cart-btn.fx-bump .cart-count { animation: fx-bump .5s cubic-bezier(.3, 1.6, .5, 1) .05s; }
+@keyframes fx-bump { 0% { transform: scale(1); } 40% { transform: scale(1.22); box-shadow: 0 0 0 6px rgb(139 92 246 / 0.25); } 100% { transform: scale(1); } }
+
+/* Aparecen al bajar (efectos.js pone fx-reveal y, al entrar en pantalla, fx-in). */
+.fx-reveal:not(.fx-in) { opacity: 0; transform: translateY(16px); }
+.fx-reveal.fx-in { animation: fx-up .5s cubic-bezier(.2, .8, .2, 1) var(--fx-delay, 0ms) backwards; }
+@keyframes fx-up { from { opacity: 0; transform: translateY(16px); } }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }

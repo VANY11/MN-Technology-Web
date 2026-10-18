@@ -2,6 +2,7 @@ import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
 import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
 import { aplicarPromos, etiquetaPromo, enLugar } from './promos.js';
+import { iniciarEfectos, volarAlCarrito } from './efectos.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -204,11 +205,15 @@ function toast(text, action) {
   toastTimer = setTimeout(() => { box.hidden = true; }, 3200);
 }
 
-function addToCart(item) {
+// from: el botón que se pulsó, para que la foto vuele de ahí al carrito.
+function addToCart(item, from) {
   const before = order.get(item.codigo) || 0;
   const now = setQty(item, before + 1);
   if (now === before) toast(`Ya tienes todas las unidades disponibles (${number.format(item.disponible)})`, ['Ver carrito', '#/carrito']);
-  else toast(`Agregado: ${item.nombre}`, ['Ver carrito', '#/carrito']);
+  else {
+    volarAlCarrito(from);
+    toast(`Agregado: ${item.nombre}`, ['Ver carrito', '#/carrito']);
+  }
 }
 
 function addButton(item, className = 'btn add-btn') {
@@ -219,7 +224,7 @@ function addButton(item, className = 'btn add-btn') {
   btn.append(icon('cart', 'ico'));
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    addToCart(item);
+    addToCart(item, btn);
   });
   return btn;
 }
@@ -609,7 +614,7 @@ function productSlide(it, promo) {
   see.addEventListener('click', () => showDetail(it));
   const add = withIcon(el('button', 'btn btn-ghost-light', 'Agregar'), 'cart');
   add.type = 'button';
-  add.addEventListener('click', () => addToCart(it));
+  add.addEventListener('click', () => addToCart(it, add));
   const share = shareButton(it);
   share.classList.add('sc-share');
   actions.append(see, add, share);
@@ -1806,4 +1811,5 @@ async function load() {
 
 saveCart();
 setupChat();
+iniciarEfectos(app);
 load();
