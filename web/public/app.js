@@ -884,7 +884,9 @@ function pagePrices() {
           const name = el('button', 'prow-name', it.nombre);
           name.type = 'button';
           name.addEventListener('click', () => showDetail(it));
-          info.append(name, el('span', 'prow-code', [it.codigo, categoryOf(it)].filter(Boolean).join(' · ')));
+          const head = el('div', 'prow-head');
+          head.append(name, shareButton(it));
+          info.append(head, el('span', 'prow-code', [it.codigo, categoryOf(it)].filter(Boolean).join(' · ')));
           const [label, kind] = stockBadge(it.disponible);
           li.append(info, el('span', `badge ${kind}`, label), el('span', 'prow-price', priceText(it) || 'Consultar'), stepper(it, updateBar));
           rows.append(li);
