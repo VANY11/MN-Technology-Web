@@ -644,17 +644,85 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
 
 /* Chispas al hacer clic. */
 .fx-burst { position: fixed; z-index: 1000; width: 0; height: 0; pointer-events: none; }
-.fx-burst i { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; border: 2px solid #a78bfa; box-shadow: 0 0 12px #8b5cf6; animation: fx-ring .5s ease-out forwards; }
-.fx-burst b { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 1px; background: #c4b5fd; box-shadow: 0 0 6px #8b5cf6; animation: fx-spark .55s ease-out forwards; }
-.fx-burst b:nth-child(odd) { background: #93c5fd; box-shadow: 0 0 6px #3b82f6; }
-@keyframes fx-ring { from { transform: scale(.2); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
-@keyframes fx-spark { from { transform: translate(0, 0) scale(1); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(.3); opacity: 0; } }
+.fx-burst i { position: absolute; left: -28px; top: -28px; width: 56px; height: 56px; border-radius: 50%; border: 2.5px solid #b69dff; box-shadow: 0 0 18px #8b5cf6, inset 0 0 12px rgb(139 92 246 / 0.6); animation: fx-ring .55s ease-out forwards; }
+.fx-burst i + i { left: -10px; top: -10px; width: 20px; height: 20px; border: 0; background: radial-gradient(circle, #fff, rgb(167 139 250 / 0.85) 45%, transparent 70%); box-shadow: none; animation: fx-flash .35s ease-out forwards; }
+.fx-burst b { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 1.5px; background: #d4c8ff; box-shadow: 0 0 9px #8b5cf6; animation: fx-spark .6s ease-out forwards; }
+.fx-burst b:nth-child(odd) { background: #a8d0ff; box-shadow: 0 0 9px #3b82f6; }
+@keyframes fx-ring { from { transform: scale(.2); opacity: 1; } to { transform: scale(2); opacity: 0; } }
+@keyframes fx-flash { from { transform: scale(.4); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+@keyframes fx-spark { from { transform: translate(0, 0) scale(1) rotate(0); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(.3) rotate(140deg); opacity: 0; } }
+
+/* Cursor propio (solo con ratón): un punto que sigue exacto y un anillo que lo persigue. Sobre algo que se puede
+   pulsar el anillo crece y se llena; al pulsar se encoge. Los campos de texto conservan su cursor. */
+html.fx-cursor-on, html.fx-cursor-on * { cursor: none !important; }
+html.fx-cursor-on :is(input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]) { cursor: auto !important; }
+.fx-dot, .fx-aro { position: fixed; left: 0; top: 0; z-index: 1001; pointer-events: none; border-radius: 50%; opacity: 0; transition: opacity .2s; will-change: transform; }
+.fx-dot { width: 8px; height: 8px; margin: -4px 0 0 -4px; background: linear-gradient(135deg, #a78bfa, #60a5fa); box-shadow: 0 0 10px rgb(139 92 246 / 0.9); }
+.fx-aro { width: 36px; height: 36px; margin: -18px 0 0 -18px; }
+.fx-aro::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgb(167 139 250 / 0.85); box-shadow: 0 0 14px rgb(139 92 246 / 0.35); transition: transform .2s ease, background-color .2s, border-color .2s; }
+.fx-aro::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px dashed rgb(96 165 250 / 0.55); opacity: 0; transition: opacity .2s; animation: fx-girar 3s linear infinite; }
+.fx-aro.sobre::before { transform: scale(1.55); background-color: rgb(139 92 246 / 0.14); border-color: #c4b5fd; }
+.fx-aro.sobre::after { opacity: 1; transform-origin: center; }
+.fx-aro.pulsa::before { transform: scale(.7); background-color: rgb(139 92 246 / 0.3); }
+.fx-dot.visible, .fx-aro.visible { opacity: 1; }
+.fx-aro.texto { opacity: 0; }
+@keyframes fx-girar { from { transform: rotate(0) scale(1.55); } to { transform: rotate(360deg) scale(1.55); } }
 
 /* El producto vuela al carrito y el carrito late. */
 .fx-fly { position: fixed; z-index: 1000; pointer-events: none; object-fit: contain; border-radius: 16px; background: #fff; box-shadow: 0 18px 40px -12px rgb(91 33 182 / 0.7); }
 .cart-btn.fx-bump { animation: fx-bump .5s cubic-bezier(.3, 1.6, .5, 1); }
 .cart-btn.fx-bump .cart-count { animation: fx-bump .5s cubic-bezier(.3, 1.6, .5, 1) .05s; }
 @keyframes fx-bump { 0% { transform: scale(1); } 40% { transform: scale(1.22); box-shadow: 0 0 0 6px rgb(139 92 246 / 0.25); } 100% { transform: scale(1); } }
+
+/* Ficha «Ver detalles»: entra con un zoom, el borde brilla y gira, el texto aparece en cascada, la foto se
+   acerca hacia donde apunta el ratón con una luz encima y al agregar el botón late con un «+1». */
+.detail[open] { animation: fx-ficha .38s cubic-bezier(.2, .9, .25, 1.1); overflow: visible; }
+.detail[open]::backdrop { animation: fx-fondo .3s ease-out; }
+@keyframes fx-ficha { from { opacity: 0; transform: translateY(18px) scale(.94); } }
+@keyframes fx-fondo { from { opacity: 0; } }
+.detail[open]::before { content: ''; position: absolute; inset: -1.5px; z-index: -1; border-radius: 21px; pointer-events: none;
+  background: conic-gradient(from var(--fx-ang, 0deg), #8b5cf6, #3b82f6, #a78bfa, #22d3ee, #8b5cf6);
+  filter: blur(.5px); opacity: .85; animation: fx-borde 6s linear infinite; }
+.detail[open]::after { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: 20px; background: var(--surface); pointer-events: none; }
+.detail { position: fixed; isolation: isolate; }
+.detail-photo { overflow: hidden; border-radius: 20px 0 0 20px; }
+@media (max-width: 640px) { .detail-photo { border-radius: 20px 20px 0 0; } }
+@media (min-width: 641px) { .detail-photo { aspect-ratio: auto; min-height: 420px; align-self: stretch; } }
+@property --fx-ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes fx-borde { to { --fx-ang: 360deg; } }
+.detail[open] .detail-body > * { animation: fx-up .45s cubic-bezier(.2, .8, .2, 1) backwards; }
+.detail[open] .detail-body > :nth-child(2) { animation-delay: .06s; } .detail[open] .detail-body > :nth-child(3) { animation-delay: .1s; }
+.detail[open] .detail-body > :nth-child(4) { animation-delay: .14s; } .detail[open] .detail-body > :nth-child(5) { animation-delay: .18s; }
+.detail[open] .detail-body > :nth-child(n+6) { animation-delay: .22s; }
+.detail[open] .detail-photo img { animation: fx-foto .5s cubic-bezier(.2, .9, .25, 1.1) .05s backwards; }
+@keyframes fx-foto { from { opacity: 0; transform: scale(.85) rotate(-4deg); } }
+.detail-photo img { transition: transform .25s ease-out; transform-origin: var(--mx, 50%) var(--my, 50%); }
+.detail-photo.fx-on img { transform: scale(1.35); }
+.detail-photo::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s;
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), rgb(167 139 250 / 0.18), transparent 65%); }
+.detail-photo.fx-on::after { opacity: 1; }
+/* Dentro de la ficha: cada dato es una ficha que se ilumina al pasar el ratón y aparece en cascada; los precios
+   brillan al pasar y el principal tiene un barrido de luz. */
+.detail .spec-list > div { position: relative; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); transition: border-color .2s, box-shadow .2s, transform .2s; }
+.detail .spec-list > div:hover { border-color: rgb(139 92 246 / 0.55); box-shadow: 0 0 0 3px rgb(139 92 246 / 0.12), 0 8px 18px -10px rgb(139 92 246 / 0.6); transform: translateY(-2px); }
+.detail[open] .spec-list > div, .detail[open] .prices > div { animation: fx-up .4s cubic-bezier(.2, .8, .2, 1) backwards; }
+.detail[open] .spec-list > div:nth-child(2), .detail[open] .prices > div:nth-child(2) { animation-delay: .2s; }
+.detail[open] .spec-list > div:nth-child(3), .detail[open] .prices > div:nth-child(3) { animation-delay: .25s; }
+.detail[open] .spec-list > div:nth-child(n+4) { animation-delay: .3s; }
+.detail .prices > div { position: relative; overflow: hidden; border: 1px solid transparent; transition: border-color .2s, transform .2s; }
+.detail .prices > div:hover { border-color: rgb(139 92 246 / 0.5); transform: translateX(3px); }
+.detail .prices > div:first-child { background: linear-gradient(120deg, rgb(139 92 246 / 0.16), rgb(59 130 246 / 0.12)); border-color: rgb(139 92 246 / 0.35); }
+.detail .prices > div:first-child dd { background: linear-gradient(90deg, #8b5cf6, #3b82f6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.detail .prices > div:first-child dd .was { -webkit-text-fill-color: var(--faint); }
+.detail .prices > div:first-child::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.35) 50%, transparent 60%); transform: translateX(-100%); animation: fx-barrido 3.2s ease-in-out .6s infinite; }
+@keyframes fx-barrido { 0%, 55% { transform: translateX(-100%); } 85%, 100% { transform: translateX(100%); } }
+#detail-add.fx-ok { animation: fx-ok .55s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes fx-ok { 40% { transform: scale(1.06); box-shadow: 0 0 0 6px rgb(139 92 246 / 0.3), 0 0 26px rgb(139 92 246 / 0.6); } }
+.fx-mas { position: fixed; z-index: 1000; transform: translate(-50%, 0); pointer-events: none; font-weight: 800; font-size: 20px;
+  background: linear-gradient(90deg, #a78bfa, #60a5fa); -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: fx-mas .9s ease-out forwards; }
+@keyframes fx-mas { from { opacity: 1; transform: translate(-50%, 0) scale(.8); } to { opacity: 0; transform: translate(-50%, -54px) scale(1.25); } }
 
 /* Aparecen al bajar (efectos.js pone fx-reveal y, al entrar en pantalla, fx-in). */
 .fx-reveal:not(.fx-in) { opacity: 0; transform: translateY(16px); }

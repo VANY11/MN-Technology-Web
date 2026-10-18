@@ -6,7 +6,7 @@
 const quieto = matchMedia('(prefers-reduced-motion: reduce)');
 const fino = matchMedia('(hover: hover) and (pointer: fine)');
 
-const INCLINABLES = '.card, .mundo, .mini-btn';
+const INCLINABLES = '.card, .mundo, .mini-btn, .detail-photo';
 const CLICABLES = 'button, a.btn, .mundo, .mini-btn, .chip, .sc-thumb, .cart-btn, .nav a';
 const APARECEN = '.card, .mundo, .mini, .section-head';
 const MAX_GRADOS = 7;
@@ -35,6 +35,7 @@ function aplicarLuz() {
     const y = (e.clientY - r.top) / r.height;
     caja.style.setProperty('--mx', `${(x * 100).toFixed(1)}%`);
     caja.style.setProperty('--my', `${(y * 100).toFixed(1)}%`);
+    if (caja.classList.contains('detail-photo')) { caja.classList.add('fx-on'); return; } // la ficha acerca la foto, no la gira
     caja.style.setProperty('--ry', `${((x - 0.5) * 2 * MAX_GRADOS).toFixed(2)}deg`);
     caja.style.setProperty('--rx', `${((0.5 - y) * 2 * MAX_GRADOS).toFixed(2)}deg`);
     caja.classList.add('fx-on');
@@ -88,18 +89,62 @@ function chispas(e) {
   capa.setAttribute('aria-hidden', 'true');
   capa.style.left = `${e.clientX}px`;
   capa.style.top = `${e.clientY}px`;
-  capa.append(document.createElement('i'));
-  const n = 8;
+  capa.append(document.createElement('i'), document.createElement('i'));
+  const n = 12;
   for (let k = 0; k < n; k++) {
     const s = document.createElement('b');
     const ang = (k / n) * Math.PI * 2 + Math.random() * 0.4;
-    const dist = 22 + Math.random() * 16;
+    const dist = 32 + Math.random() * 26;
     s.style.setProperty('--dx', `${(Math.cos(ang) * dist).toFixed(1)}px`);
     s.style.setProperty('--dy', `${(Math.sin(ang) * dist).toFixed(1)}px`);
     capa.append(s);
   }
-  document.body.append(capa);
-  setTimeout(() => capa.remove(), 650);
+  // Dentro de una ventana (ficha, compartir) va en ella: lo que está en body queda por debajo.
+  (t.closest('dialog[open]') || document.body).append(capa);
+  setTimeout(() => capa.remove(), 700);
+}
+
+/* ---------- Cursor propio ---------- */
+
+// Un punto que va exacto con el ratón y un anillo que lo persigue con un poco de retraso.
+function prepararCursor() {
+  if (quieto.matches || !fino.matches) return;
+  const dot = document.createElement('span');
+  const aro = document.createElement('span');
+  dot.className = 'fx-dot';
+  aro.className = 'fx-aro';
+  for (const n of [dot, aro]) n.setAttribute('aria-hidden', 'true');
+  document.body.append(dot, aro);
+  document.documentElement.classList.add('fx-cursor-on');
+
+  let x = -100, y = -100, ax = x, ay = y, corriendo = false;
+  const paso = () => {
+    ax += (x - ax) * 0.2;
+    ay += (y - ay) * 0.2;
+    aro.style.transform = `translate3d(${ax}px, ${ay}px, 0)`;
+    if (Math.abs(x - ax) + Math.abs(y - ay) > 0.3) requestAnimationFrame(paso);
+    else corriendo = false;
+  };
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    x = e.clientX;
+    y = e.clientY;
+    // Las ventanas (ficha, compartir) tapan todo lo de body: el cursor se muda a la que esté abierta.
+    const host = document.querySelector('dialog[open]') || document.body;
+    if (dot.parentNode !== host) host.append(dot, aro);
+    dot.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    dot.classList.add('visible');
+    aro.classList.add('visible');
+    const t = e.target instanceof Element ? e.target : null;
+    aro.classList.toggle('sobre', Boolean(t?.closest(`${CLICABLES}, a, label, summary, [role=button]`)));
+    const texto = Boolean(t?.closest('input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]'));
+    aro.classList.toggle('texto', texto);
+    dot.classList.toggle('visible', !texto);
+    if (!corriendo) { corriendo = true; requestAnimationFrame(paso); }
+  }, { passive: true });
+  document.addEventListener('pointerdown', () => aro.classList.add('pulsa'), { passive: true });
+  document.addEventListener('pointerup', () => aro.classList.remove('pulsa'), { passive: true });
+  document.documentElement.addEventListener('mouseleave', () => { dot.classList.remove('visible'); aro.classList.remove('visible'); });
 }
 
 /* ---------- El producto vuela al carrito ---------- */
@@ -140,6 +185,23 @@ export function volarAlCarrito(desde) {
   vuelo.oncancel = () => copia.remove();
 }
 
+// En la ficha el carrito queda detrás de la ventana: el botón late y sube un «+1».
+export function celebrarEnFicha(boton) {
+  if (!boton || quieto.matches) return;
+  boton.classList.remove('fx-ok');
+  void boton.offsetWidth;
+  boton.classList.add('fx-ok');
+  const r = boton.getBoundingClientRect();
+  const mas = document.createElement('span');
+  mas.className = 'fx-mas';
+  mas.textContent = '+1';
+  mas.setAttribute('aria-hidden', 'true');
+  mas.style.left = `${r.left + r.width / 2}px`;
+  mas.style.top = `${r.top}px`;
+  (boton.closest('dialog[open]') || document.body).append(mas);
+  setTimeout(() => mas.remove(), 900);
+}
+
 /* ---------- Aparecen al bajar ---------- */
 
 let mirador = null;
@@ -178,4 +240,5 @@ export function iniciarEfectos(app) {
   document.addEventListener('pointerout', soltarLuz, { passive: true });
   document.addEventListener('pointerdown', chispas, { passive: true });
   prepararAparicion(app);
+  prepararCursor();
 }

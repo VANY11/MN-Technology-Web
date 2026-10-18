@@ -2,7 +2,7 @@ import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
 import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
 import { aplicarPromos, etiquetaPromo, enLugar } from './promos.js';
-import { iniciarEfectos, volarAlCarrito } from './efectos.js';
+import { iniciarEfectos, volarAlCarrito, celebrarEnFicha } from './efectos.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -420,7 +420,8 @@ function showDetail(item) {
   };
   addLabel();
   add.onclick = () => {
-    setQty(item, (order.get(item.codigo) || 0) + 1);
+    const before = order.get(item.codigo) || 0;
+    if (setQty(item, before + 1) > before) celebrarEnFicha(add);
     addLabel();
     if (parseRoute().page === 'carrito') render();
   };
