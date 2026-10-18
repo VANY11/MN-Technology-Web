@@ -99,6 +99,15 @@ const brandKey = (item) => {
 };
 let brandNames = new Map();
 
+// «Mundos MN»: los cuatro de los íconos del logo. Cada uno junta las categorías cuyo nombre encaja.
+const MUNDOS = [
+  { id: 'telefonia', nombre: 'Telefonía', texto: 'Celulares, forros, vidrios y cargadores', icono: 'phone', re: /telefon|celular|iphone|smartphone|vidrio|forro|cargador/ },
+  { id: 'gaming', nombre: 'Gaming', texto: 'Consolas, controles y accesorios', icono: 'gaming', re: /gam(er|ing)|consola|videojueg|control/ },
+  { id: 'seguridad', nombre: 'Seguridad', texto: 'Cámaras y videovigilancia', icono: 'camera', re: /camara|videovigil|seguridad|dvr|nvr/ },
+  { id: 'audio', nombre: 'Audio', texto: 'Audífonos, cornetas y más', icono: 'audio', re: /audio|audifono|auricular|corneta|parlante|bocina/ },
+];
+const mundoDe = (item) => MUNDOS.find((m) => m.re.test(normalize(item.categoria))) || null;
+
 function buildBrandNames() {
   const spellings = new Map();
   for (const it of items) {
@@ -723,9 +732,25 @@ function showcase() {
 
 /* ---------- Inicio ---------- */
 
-function featureText(s) {
-  const cats = countBy(items, (it) => it.categoria);
-  return s.replace('{productos}', number.format(items.length)).replace('{categorias}', number.format(cats.size));
+// «Mundos MN»: cuatro tarjetas grandes (los íconos del logo) con foto, cantidad y enlace a sus productos.
+function mundosSection() {
+  const sec = el('section', 'mundos wrap');
+  sec.setAttribute('aria-label', 'Mundos MN');
+  MUNDOS.forEach((m, i) => {
+    const list = items.filter((it) => it.disponible > 0 && mundoDe(it) === m);
+    if (!list.length) return;
+    const muestra = list.filter((it) => safePhoto(it.foto)).sort((a, b) => b.disponible - a.disponible)[0] || list[0];
+    const a = link(productsHref({ mundo: m.id }), `mundo mundo-${i + 1}`);
+    const txt = el('div', 'mundo-text');
+    const ic = el('span', 'mundo-icon');
+    ic.append(icon(m.icono));
+    txt.append(ic, el('h3', null, m.nombre), el('p', null, m.texto), withIcon(el('span', 'mundo-count', plural(list.length, 'producto', 'productos')), 'arrow', true));
+    const photo = el('div', 'mundo-photo');
+    photoInto(photo, muestra);
+    a.append(txt, photo);
+    sec.append(a);
+  });
+  return sec;
 }
 
 function pageHome() {
@@ -736,17 +761,7 @@ function pageHome() {
   // Portada: la vitrina en vivo.
   frag.append(showcase());
 
-  const features = el('section', 'features wrap');
-  for (const f of STORE.ventajas) {
-    const div = el('div', 'feature');
-    const ic = el('span', 'feature-icon');
-    ic.append(icon(f.icono));
-    const txt = el('div');
-    txt.append(el('strong', null, featureText(f.titulo)), el('span', null, featureText(f.texto)));
-    div.append(ic, txt);
-    features.append(div);
-  }
-  frag.append(features);
+  frag.append(mundosSection());
 
   // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
   const nuevos = promoCards('nuevos').cards;
@@ -875,8 +890,9 @@ function pageProducts(params) {
   const category = params.get('categoria') || '';
   const brand = params.get('marca') || '';
   const term = params.get('q') || '';
+  const mundo = category ? null : MUNDOS.find((m) => m.id === params.get('mundo')) || null;
   // Al cambiar de categoría o marca se reinician los filtros finos y la paginación.
-  const key = `${category}|${brand}|${term}`;
+  const key = `${category}|${brand}|${term}|${mundo?.id || ''}`;
   if (key !== lastProductsKey) {
     specFilters = new Map();
     limit = PAGE;
@@ -892,7 +908,7 @@ function pageProducts(params) {
   const head = el('div', 'shop-head');
   const titles = el('div');
   const count = el('p', 'muted');
-  titles.append(el('h1', null, category || (brand ? brandName(brand) : 'Productos')), count);
+  titles.append(el('h1', null, category || (brand ? brandName(brand) : mundo ? mundo.nombre : 'Productos')), count);
   const tools = el('div', 'shop-tools');
   const filterBtn = withIcon(el('button', 'btn btn-outline filters-toggle', 'Filtros'), 'filter');
   filterBtn.type = 'button';
@@ -920,14 +936,14 @@ function pageProducts(params) {
 
   function draw() {
     const terms = normalize(term).split(/\s+/).filter(Boolean);
-    const searched = items.filter((it) => matchesTerms(it, terms));
+    const searched = items.filter((it) => matchesTerms(it, terms) && (!mundo || mundoDe(it) === mundo));
     const inCategory = category ? searched.filter((it) => categoryOf(it) === category) : searched;
     const inBrand = brand ? inCategory.filter((it) => brandKey(it) === brand) : inCategory;
     const shown = inBrand.filter(matchesSpecs).sort(SORTS[sortBy]);
 
     const sideHead = el('div', 'fhead');
     sideHead.append(withIcon(el('strong', null, 'Filtros'), 'filter'));
-    if (category || brand || [...specFilters.values()].some((v) => v.size)) {
+    if (category || brand || mundo || [...specFilters.values()].some((v) => v.size)) {
       const clear = el('button', 'link-more', 'Limpiar');
       clear.type = 'button';
       clear.addEventListener('click', () => { specFilters = new Map(); go('productos', { q: term }); });
@@ -943,7 +959,7 @@ function pageProducts(params) {
     if (brandCounts.size) {
       const entries = byCountDesc(brandCounts).map((k) => [k, brandName(k), brandCounts.get(k)]);
       groups.push(
-        filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, q: term }), 10),
+        filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, mundo: mundo?.id, q: term }), 10),
       );
     }
     // Filtros por especificación: los campos de la categoría con al menos dos valores distintos.
