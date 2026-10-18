@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Monitor · MN Technology</title>
+  <meta name="theme-color" content="#7c3aed">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/monitor.css">
+  <script type="module" src="/monitor.js"></script>
+</head>
+<body>
+  <header class="m-top">
+    <div class="m-brand">
+      <span class="m-mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M8 50V14h8l16 21 16-21h8v36h-9V30L32 48 17 30v20z" fill="#fff"/></svg></span>
+      <div>
+        <h1>Monitor de la web</h1>
+        <p class="m-sub" id="resumen">Conectando…</p>
+      </div>
+    </div>
+    <div class="m-acciones">
+      <span class="m-pulso" id="pulso" aria-hidden="true"></span>
+      <span class="m-hora" id="hora">—</span>
+      <button type="button" id="pausa">Pausar</button>
+      <button type="button" id="salir" class="m-sec">Salir</button>
+    </div>
+  </header>
+
+  <form class="m-login" id="login" hidden>
+    <h2>Clave del monitor</h2>
+    <p>Es la variable <code>MONITOR_CLAVE</code> del proyecto en Cloudflare Pages.</p>
+    <input type="password" id="clave" autocomplete="current-password" required aria-label="Clave del monitor">
+    <button type="submit">Entrar</button>
+    <p class="m-error" id="login-error" role="alert"></p>
+  </form>
+
+  <main id="panel" hidden>
+    <section aria-labelledby="t-servicios">
+      <h2 id="t-servicios">Servicios</h2>
+      <div class="m-grid" id="servicios"></div>
+    </section>
+
+    <section aria-labelledby="t-visitas">
+      <h2 id="t-visitas">Visitas</h2>
+      <div id="visitas"></div>
+    </section>
+
+    <section aria-labelledby="t-eventos">
+      <h2 id="t-eventos">Cambios de estado</h2>
+      <ol class="m-eventos" id="eventos"><li class="m-vacio">Sin cambios desde que abriste el panel.</li></ol>
+    </section>
+  </main>
+</body>
+</html>
