@@ -230,7 +230,7 @@ const productsHref = (params) => hashFor('productos', params);
 function productCard(item) {
   const li = el('li', 'card');
   const top = el('div', 'card-top');
-  top.append(el('span', 'brand-tag', brandKey(item) ? brandName(brandKey(item)) : categoryOf(item)));
+  top.append(el('span', 'brand-tag', brandKey(item) ? brandName(brandKey(item)) : categoryOf(item)), shareButton(item));
   li.append(top);
 
   const photo = el('div', 'photo');
@@ -320,12 +320,103 @@ function showDetail(item) {
   const wa = $('detail-whatsapp');
   wa.hidden = !CONTACT.whatsapp;
   if (CONTACT.whatsapp) wa.href = waLink(`Hola, me interesa: ${item.nombre}${item.codigo ? ` (${item.codigo})` : ''}`);
+  const share = $('detail-share');
+  share.hidden = !item.codigo;
+  share.replaceChildren(withIcon(el('span', null, 'Compartir'), 'share'));
+  share.onclick = () => shareProduct(item);
   if (typeof detail.showModal === 'function') detail.showModal();
 }
 
 detail.addEventListener('click', (e) => {
   if (e.target === detail || e.target.closest('[data-close]')) detail.close();
 });
+
+/* ---------- Compartir ---------- */
+
+// Cada producto tiene su enlace (/p/<código>): abre la tienda con su ficha, y al compartirlo
+// WhatsApp, Facebook, etc. muestran su nombre, precio y foto (la función functions/p/[code].js).
+const productUrl = (item) => `${location.origin}/p/${encodeURIComponent(item.codigo)}`;
+const shareDialog = $('share');
+
+function shareText(item) {
+  const price = priceText(item, 'precio');
+  return `${item.nombre}${price ? ` · ${price}` : ''} en MN Technology`;
+}
+
+function shareButton(item) {
+  const btn = el('button', 'icon-btn share-btn');
+  btn.type = 'button';
+  btn.title = 'Compartir';
+  btn.setAttribute('aria-label', `Compartir ${item.nombre}`);
+  btn.append(icon('share', 'ico'));
+  btn.hidden = !item.codigo;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    shareProduct(item);
+  });
+  return btn;
+}
+
+// En el teléfono, el menú del sistema (WhatsApp, Instagram, etc.); si no hay, nuestro menú.
+async function shareProduct(item) {
+  const url = productUrl(item);
+  const text = shareText(item);
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try {
+      await navigator.share({ title: item.nombre, text, url });
+      return;
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
+    }
+  }
+  openShareMenu(item, url, text);
+}
+
+function openShareMenu(item, url, text) {
+  const enc = encodeURIComponent;
+  const targets = [
+    ['WhatsApp', 'chat', 'wa', `https://wa.me/?text=${enc(`${text}\n${url}`)}`],
+    ['Facebook', 'facebook', 'fb', `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`],
+    ['Telegram', 'send', 'tg', `https://t.me/share/url?url=${enc(url)}&text=${enc(text)}`],
+    ['X', 'x', 'xx', `https://x.com/intent/post?url=${enc(url)}&text=${enc(text)}`],
+  ];
+  $('share-name').textContent = item.nombre;
+  $('share-grid').replaceChildren(
+    ...targets.map(([name, ico, cls, href]) => {
+      const a = link(href, `share-opt share-${cls}`);
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.append(icon(ico, 'ico'), el('span', null, name));
+      return a;
+    }),
+  );
+  const input = $('share-url');
+  input.value = url;
+  const copy = $('share-copy');
+  copy.textContent = 'Copiar';
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      input.select();
+      document.execCommand?.('copy');
+    }
+    copy.textContent = '¡Copiado!';
+  };
+  if (typeof shareDialog.showModal === 'function') shareDialog.showModal();
+}
+
+shareDialog.addEventListener('click', (e) => {
+  if (e.target === shareDialog || e.target.closest('[data-close]')) shareDialog.close();
+});
+
+// Llegada por un enlace compartido: la tienda se ve en el catálogo y, al cargar, se abre la ficha.
+const sharedCode = (() => {
+  const m = location.pathname.match(/^\/p\/([^/]+)\/?$/);
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
+})();
+if (sharedCode) history.replaceState(null, '', `/${location.hash || '#/productos'}`);
 
 /* ---------- Inicio ---------- */
 
@@ -1443,6 +1534,11 @@ async function load() {
   if (!loadError) syncCart();
   fillFooter();
   render();
+  if (sharedCode && !loadError) {
+    const item = items.find((it) => it.codigo === sharedCode);
+    if (item) showDetail(item);
+    else toast('Ese producto ya no está disponible. Mira otros parecidos en el catálogo.');
+  }
 }
 
 saveCart();
