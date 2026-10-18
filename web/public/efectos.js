@@ -1,4 +1,4 @@
-// Efectos de ratón y clic: luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
+// Efectos de ratón y clic (el cursor «Flecha MN» va solo en styles.css): luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
 // reacciona, chispas al hacer clic, producto que vuela al carrito y tarjetas que aparecen al bajar.
 // Nada de esto es necesario para usar la web: con «reducir movimiento» no se activa, y en pantallas táctiles solo
 // quedan las chispas, el vuelo al carrito y la aparición al bajar.
@@ -104,49 +104,6 @@ function chispas(e) {
   setTimeout(() => capa.remove(), 700);
 }
 
-/* ---------- Cursor propio ---------- */
-
-// Un punto que va exacto con el ratón y un anillo que lo persigue con un poco de retraso.
-function prepararCursor() {
-  if (quieto.matches || !fino.matches) return;
-  const dot = document.createElement('span');
-  const aro = document.createElement('span');
-  dot.className = 'fx-dot';
-  aro.className = 'fx-aro';
-  for (const n of [dot, aro]) n.setAttribute('aria-hidden', 'true');
-  document.body.append(dot, aro);
-  document.documentElement.classList.add('fx-cursor-on');
-
-  let x = -100, y = -100, ax = x, ay = y, corriendo = false;
-  const paso = () => {
-    ax += (x - ax) * 0.2;
-    ay += (y - ay) * 0.2;
-    aro.style.transform = `translate3d(${ax}px, ${ay}px, 0)`;
-    if (Math.abs(x - ax) + Math.abs(y - ay) > 0.3) requestAnimationFrame(paso);
-    else corriendo = false;
-  };
-  document.addEventListener('pointermove', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    x = e.clientX;
-    y = e.clientY;
-    // Las ventanas (ficha, compartir) tapan todo lo de body: el cursor se muda a la que esté abierta.
-    const host = document.querySelector('dialog[open]') || document.body;
-    if (dot.parentNode !== host) host.append(dot, aro);
-    dot.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-    dot.classList.add('visible');
-    aro.classList.add('visible');
-    const t = e.target instanceof Element ? e.target : null;
-    aro.classList.toggle('sobre', Boolean(t?.closest(`${CLICABLES}, a, label, summary, [role=button]`)));
-    const texto = Boolean(t?.closest('input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]'));
-    aro.classList.toggle('texto', texto);
-    dot.classList.toggle('visible', !texto);
-    if (!corriendo) { corriendo = true; requestAnimationFrame(paso); }
-  }, { passive: true });
-  document.addEventListener('pointerdown', () => aro.classList.add('pulsa'), { passive: true });
-  document.addEventListener('pointerup', () => aro.classList.remove('pulsa'), { passive: true });
-  document.documentElement.addEventListener('mouseleave', () => { dot.classList.remove('visible'); aro.classList.remove('visible'); });
-}
-
 /* ---------- El producto vuela al carrito ---------- */
 
 // Busca la foto que está junto al botón (tarjeta, vitrina o ficha) y la lleva hasta el carrito.
@@ -240,5 +197,4 @@ export function iniciarEfectos(app) {
   document.addEventListener('pointerout', soltarLuz, { passive: true });
   document.addEventListener('pointerdown', chispas, { passive: true });
   prepararAparicion(app);
-  prepararCursor();
 }

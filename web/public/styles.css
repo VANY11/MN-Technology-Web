@@ -652,21 +652,13 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
 @keyframes fx-flash { from { transform: scale(.4); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
 @keyframes fx-spark { from { transform: translate(0, 0) scale(1) rotate(0); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(.3) rotate(140deg); opacity: 0; } }
 
-/* Cursor propio (solo con ratón): un punto que sigue exacto y un anillo que lo persigue. Sobre algo que se puede
-   pulsar el anillo crece y se llena; al pulsar se encoge. Los campos de texto conservan su cursor. */
-html.fx-cursor-on, html.fx-cursor-on * { cursor: none !important; }
-html.fx-cursor-on :is(input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]) { cursor: auto !important; }
-.fx-dot, .fx-aro { position: fixed; left: 0; top: 0; z-index: 1001; pointer-events: none; border-radius: 50%; opacity: 0; transition: opacity .2s; will-change: transform; }
-.fx-dot { width: 8px; height: 8px; margin: -4px 0 0 -4px; background: linear-gradient(135deg, #a78bfa, #60a5fa); box-shadow: 0 0 10px rgb(139 92 246 / 0.9); }
-.fx-aro { width: 36px; height: 36px; margin: -18px 0 0 -18px; }
-.fx-aro::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgb(167 139 250 / 0.85); box-shadow: 0 0 14px rgb(139 92 246 / 0.35); transition: transform .2s ease, background-color .2s, border-color .2s; }
-.fx-aro::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px dashed rgb(96 165 250 / 0.55); opacity: 0; transition: opacity .2s; animation: fx-girar 3s linear infinite; }
-.fx-aro.sobre::before { transform: scale(1.55); background-color: rgb(139 92 246 / 0.14); border-color: #c4b5fd; }
-.fx-aro.sobre::after { opacity: 1; transform-origin: center; }
-.fx-aro.pulsa::before { transform: scale(.7); background-color: rgb(139 92 246 / 0.3); }
-.fx-dot.visible, .fx-aro.visible { opacity: 1; }
-.fx-aro.texto { opacity: 0; }
-@keyframes fx-girar { from { transform: rotate(0) scale(1.55); } to { transform: rotate(360deg) scale(1.55); } }
+/* Cursor «Flecha MN»: flecha y mano con el degradado de la marca (cursores del sistema, sin JavaScript). Los campos
+   de texto conservan su cursor. */
+@media (hover: hover) and (pointer: fine) {
+  html { cursor: url(/cursor-mn.svg) 4 3, auto; }
+  :is(a, button, summary, label, select, [role=button]):not(:disabled) { cursor: url(/cursor-mano.svg) 11 4, pointer !important; }
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea) { cursor: text; }
+}
 
 /* El producto vuela al carrito y el carrito late. */
 .fx-fly { position: fixed; z-index: 1000; pointer-events: none; object-fit: contain; border-radius: 16px; background: #fff; box-shadow: 0 18px 40px -12px rgb(91 33 182 / 0.7); }
