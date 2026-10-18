@@ -10,8 +10,10 @@
 //   CF_ACCESS_CLIENT_SECRET  Client Secret del token worker-web                         (secreto)
 // GET /api/pedido dice si los pedidos están activos; sin esas variables la web ofrece WhatsApp o copiar el pedido.
 
+import { revisarCliente } from '../../public/datos-cliente.js';
+
 const MAX_BYTES = 20000;
-const CAMPOS = { nombre: 80, telefono: 30, cedula: 20, entrega: 60, direccion: 200, pago: 60, notas: 300 };
+const CAMPOS = { entrega: 60, direccion: 200, pago: 60, notas: 300 };
 
 const json = (body, status) =>
   new Response(JSON.stringify(body), {
@@ -52,7 +54,11 @@ export async function onRequestPost({ env, request }) {
   // Campo trampa: invisible para las personas; los robots que llenan todo lo completan.
   if (body.sitio) return json({ error: 'Pedido rechazado' }, 400);
 
-  const pedido = { moneda: ['USD', 'VES', 'COP'].includes(body.moneda) ? body.moneda : 'USD' };
+  // Nombre, apellido, cédula y celular son obligatorios (la web los revisa antes; aquí, por si llegan por otro lado).
+  const cliente = revisarCliente(body);
+  if (cliente.errores) return json({ error: Object.values(cliente.errores)[0], campos: cliente.errores }, 400);
+  const { nombre, apellido, cedula, telefono } = cliente.datos;
+  const pedido = { nombre: `${nombre} ${apellido}`, cedula, telefono, moneda: ['USD', 'VES', 'COP'].includes(body.moneda) ? body.moneda : 'USD' };
   for (const [k, max] of Object.entries(CAMPOS)) {
     if (typeof body[k] === 'string') pedido[k] = body[k].trim().slice(0, max);
   }

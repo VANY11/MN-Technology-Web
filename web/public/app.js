@@ -1,5 +1,6 @@
 import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
+import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -188,7 +189,6 @@ function addToCart(item) {
   const now = setQty(item, before + 1);
   if (now === before) toast(`Ya tienes todas las unidades disponibles (${number.format(item.disponible)})`, ['Ver carrito', '#/carrito']);
   else toast(`Agregado: ${item.nombre}`, ['Ver carrito', '#/carrito']);
-  if (parseRoute().page === 'precios') render();
 }
 
 function addButton(item, className = 'btn add-btn') {
@@ -315,7 +315,7 @@ function showDetail(item) {
   add.onclick = () => {
     setQty(item, (order.get(item.codigo) || 0) + 1);
     addLabel();
-    if (parseRoute().page === 'precios' || parseRoute().page === 'carrito') render();
+    if (parseRoute().page === 'carrito') render();
   };
   const wa = $('detail-whatsapp');
   wa.hidden = !CONTACT.whatsapp;
@@ -413,6 +413,142 @@ const sharedCode = (() => {
 })();
 if (sharedCode) history.replaceState(null, '', `/${location.hash || '#/productos'}`);
 
+/* ---------- Vitrina en vivo (portada) ---------- */
+
+const SHOWCASE_SIZE = 8;
+const SHOWCASE_MS = 6000;
+let showcaseTimer = 0;
+
+// Los equipos de la vitrina: con foto y precio; si hay pocos, se completa con los de más existencias.
+// El orden cambia en cada visita para que la portada se vea viva.
+function showcaseItems() {
+  const priced = items.filter((it) => it.disponible > 0 && hasPrice(it, 'precio'));
+  const withPhoto = priced.filter((it) => safePhoto(it.foto)).sort(() => Math.random() - 0.5);
+  const rest = priced.filter((it) => !safePhoto(it.foto)).sort((a, b) => b.disponible - a.disponible);
+  return [...withPhoto, ...rest].slice(0, SHOWCASE_SIZE);
+}
+
+function urgency(n) {
+  if (n === 1) return ['¡Última unidad!', 'hot'];
+  if (n <= LOW_STOCK) return [`¡Quedan ${n}!`, 'hot'];
+  return [`${number.format(n)} disponibles`, 'ok'];
+}
+
+function showcase() {
+  clearInterval(showcaseTimer);
+  const list = showcaseItems();
+  const sec = el('section', 'showcase');
+  sec.setAttribute('aria-roledescription', 'carrusel');
+  sec.setAttribute('aria-label', 'Vitrina');
+  if (!list.length) {
+    const inner = el('div', 'showcase-inner wrap showcase-empty');
+    const txt = el('div', 'sc-info');
+    txt.append(el('span', 'sc-live', 'En vitrina'), el('h1', 'sc-name', loadError ? 'MN Technology' : 'Cargando la vitrina…'));
+    if (loadError) txt.append(withIcon(link('#/productos', 'btn btn-light', 'Ver catálogo'), 'arrow', true));
+    inner.append(txt);
+    sec.append(inner);
+    return sec;
+  }
+
+  const inner = el('div', 'showcase-inner wrap');
+  const stage = el('div', 'sc-stage');
+  const photo = el('div', 'sc-photo');
+  stage.append(photo);
+  const info = el('div', 'sc-info');
+  info.setAttribute('aria-live', 'polite');
+  const thumbs = el('ul', 'sc-thumbs');
+  const bar = el('div', 'sc-progress');
+  const fill = el('span');
+  bar.append(fill);
+  let index = 0;
+
+  const show = (i) => {
+    index = (i + list.length) % list.length;
+    const it = list[index];
+    photo.classList.remove('sc-in');
+    void photo.offsetWidth; // reinicia la animación de entrada
+    photo.classList.add('sc-in');
+    photoInto(photo, it);
+    const tags = el('div', 'sc-tags');
+    tags.append(el('span', 'sc-live', 'En vitrina'), el('span', 'sc-cat', [brandKey(it) && brandName(brandKey(it)), categoryOf(it)].filter(Boolean).join(' · ')));
+    const name = el('h1', 'sc-name', it.nombre);
+    const prices = el('div', 'sc-prices');
+    const main = currency.value;
+    const others = Object.keys(FORMATS).filter((k) => k !== main && hasPrice(it, k));
+    prices.append(el('span', 'sc-price', priceText(it, main) || priceText(it, 'precio')));
+    if (others.length) prices.append(el('span', 'sc-alt', others.map((k) => priceText(it, k)).join('  ·  ')));
+    const [label, kind] = urgency(it.disponible);
+    const stock = withIcon(el('span', `sc-stock ${kind}`, label), 'box');
+    const actions = el('div', 'sc-actions');
+    const see = withIcon(el('button', 'btn btn-light', 'Ver detalles'), 'arrow', true);
+    see.type = 'button';
+    see.addEventListener('click', () => showDetail(it));
+    const add = withIcon(el('button', 'btn btn-ghost-light', 'Agregar'), 'cart');
+    add.type = 'button';
+    add.addEventListener('click', () => addToCart(it));
+    const share = shareButton(it);
+    share.classList.add('sc-share');
+    actions.append(see, add, share);
+    info.replaceChildren(tags, name, prices, stock, actions);
+    for (const [j, b] of [...thumbs.children].entries()) b.firstChild.setAttribute('aria-current', String(j === index));
+    fill.style.animation = 'none';
+    void fill.offsetWidth;
+    fill.style.animation = '';
+  };
+
+  list.forEach((it, j) => {
+    const li = el('li');
+    const b = el('button', 'sc-thumb');
+    b.type = 'button';
+    b.setAttribute('aria-label', it.nombre);
+    const ph = el('span', 'sc-thumb-photo');
+    photoInto(ph, it);
+    b.append(ph);
+    b.addEventListener('click', () => { show(j); restart(); });
+    li.append(b);
+    thumbs.append(li);
+  });
+
+  const arrows = el('div', 'sc-arrows');
+  for (const [key, dir, label] of [['left', -1, 'Anterior'], ['right', 1, 'Siguiente']]) {
+    const b = el('button', 'sc-arrow');
+    b.type = 'button';
+    b.setAttribute('aria-label', label);
+    b.append(icon(key));
+    b.addEventListener('click', () => { show(index + dir); restart(); });
+    arrows.append(b);
+  }
+
+  // Rota sola; se detiene con el ratón encima, con el foco dentro o si la persona prefiere sin movimiento.
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let paused = false;
+  const tick = () => {
+    if (!sec.isConnected) return clearInterval(showcaseTimer);
+    if (!paused && !document.hidden && !detail.open) show(index + 1);
+  };
+  const restart = () => {
+    clearInterval(showcaseTimer);
+    if (!still && list.length > 1) showcaseTimer = setInterval(tick, SHOWCASE_MS);
+  };
+  const pause = (v) => { paused = v; sec.classList.toggle('paused', v); };
+  sec.addEventListener('mouseenter', () => pause(true));
+  sec.addEventListener('mouseleave', () => pause(false));
+  sec.addEventListener('focusin', () => pause(true));
+  sec.addEventListener('focusout', () => pause(false));
+  if (still || list.length < 2) sec.classList.add('paused');
+  sec.style.setProperty('--sc-ms', `${SHOWCASE_MS}ms`);
+
+  const nav = el('div', 'sc-nav');
+  nav.append(thumbs, arrows);
+  inner.append(stage, info);
+  sec.append(inner, el('div', 'wrap sc-bottom'));
+  sec.lastChild.append(bar, nav);
+  if (list.length < 2) sec.lastChild.hidden = true;
+  show(0);
+  restart();
+  return sec;
+}
+
 /* ---------- Inicio ---------- */
 
 function featureText(s) {
@@ -425,21 +561,8 @@ function pageHome() {
   const catCounts = countBy(items, (it) => it.categoria);
   const topCats = byCountDesc(catCounts);
 
-  // Portada: las dos categorías con más productos.
-  const hero = el('section', 'banners');
-  const pair = topCats.slice(0, 2);
-  (pair.length ? pair : ['Catálogo']).forEach((name, i) => {
-    const a = link(pair.length ? productsHref({ categoria: name }) : '#/productos', `banner banner-${i + 1}`);
-    const art = el('div', 'banner-art');
-    art.append(icon(iconFor(name), 'banner-icon'));
-    const text = el('div', 'banner-text');
-    text.append(el('h2', null, breakable(name)));
-    if (pair.length) text.append(el('p', null, plural(catCounts.get(name), 'producto disponible', 'productos disponibles')));
-    text.append(withIcon(el('span', 'btn btn-light', 'Ver catálogo'), 'arrow', true));
-    a.append(art, text);
-    hero.append(a);
-  });
-  frag.append(hero);
+  // Portada: la vitrina en vivo.
+  frag.append(showcase());
 
   const features = el('section', 'features wrap');
   for (const f of STORE.ventajas) {
@@ -518,10 +641,10 @@ function pageHome() {
   const txt = el('div');
   txt.append(
     el('h2', null, '¿Compras para tu negocio o varios equipos?'),
-    el('p', null, 'Arma tu pedido en la lista de precios y envíanoslo para cotizar.'),
+    el('p', null, 'Arma tu pedido en el carrito y envíanoslo para cotizar.'),
   );
   const btns = el('div', 'cta-btns');
-  btns.append(withIcon(link('#/precios', 'btn btn-light', 'Lista de precios'), 'list'), link('#/contacto', 'btn btn-ghost-light', 'Contáctanos'));
+  btns.append(withIcon(link('#/productos', 'btn btn-light', 'Ver productos'), 'arrow', true), link('#/contacto', 'btn btn-ghost-light', 'Contáctanos'));
   inner.append(txt, btns);
   cta.append(inner);
   frag.append(cta);
@@ -704,11 +827,7 @@ function pageProducts(params) {
   return wrap;
 }
 
-/* ---------- Lista de precios ---------- */
-
-let priceCategory = '';
-let priceBrand = '';
-let priceTerm = '';
+/* ---------- Pedido ---------- */
 
 function orderLines() {
   const byCode = new Map(items.map((it) => [it.codigo, it]));
@@ -734,7 +853,7 @@ function orderText(datos) {
   if (lines.some(([it]) => !hasPrice(it, cur))) out.push('(sin contar los productos con precio por confirmar)');
   if (datos) {
     out.push('', `Nombre: ${datos.nombre}`);
-    if (datos.cedula) out.push(`Cédula: ${datos.cedula}`);
+    out.push(`Cédula: ${datos.cedula}`);
     out.push(`Teléfono: ${datos.telefono}`);
     if (datos.entrega) out.push(`Entrega: ${datos.entrega}`);
     if (datos.direccion) out.push(`Dirección: ${datos.direccion}`);
@@ -787,123 +906,6 @@ function stepper(it, onChange) {
   return box;
 }
 
-function pagePrices() {
-  const wrap = el('div', 'prices-page wrap');
-  const head = el('div', 'prices-head');
-  head.append(
-    el('h1', null, 'Lista de precios'),
-    el('p', 'muted', 'Marca la cantidad de cada producto y revisa tu pedido en el carrito.'),
-  );
-  const tabs = el('div', 'tabs');
-  const search = el('input', 'input');
-  search.type = 'search';
-  search.placeholder = 'Buscar nombre, modelo o código…';
-  search.setAttribute('aria-label', 'Buscar en la lista de precios');
-  search.value = priceTerm;
-  const tabsRow = el('div', 'tabs-row');
-  tabsRow.append(tabs, search);
-  const brandsRow = el('div', 'chips-row');
-  const list = el('div', 'accordion');
-  wrap.append(head, tabsRow, brandsRow, list);
-
-  const bar = el('div', 'order-bar');
-  const barInner = el('div', 'order-inner wrap');
-  const summary = el('div', 'order-summary');
-  const cartLink = withIcon(link('#/carrito', 'btn', 'Ir al carrito'), 'arrow', true);
-  const actions = el('div', 'order-actions');
-  actions.append(cartLink);
-  barInner.append(summary, actions);
-  bar.append(barInner);
-  wrap.append(bar);
-
-  function updateBar() {
-    const lines = orderLines();
-    const qty = lines.reduce((s, [, n]) => s + n, 0);
-    const cur = currency.value;
-    summary.replaceChildren(el('span', null, `Cantidad: ${number.format(qty)}`), el('strong', null, `Total: ${FORMATS[cur].format(orderTotal(lines, cur))}`));
-    cartLink.classList.toggle('disabled', !qty);
-  }
-
-  function draw() {
-    const catCounts = countBy(items, categoryOf);
-    const cats = byCountDesc(catCounts);
-    tabs.replaceChildren(
-      ...['', ...cats.slice(0, 4)].map((c) => {
-        const b = el('button', 'tab', c || 'Todas');
-        b.type = 'button';
-        b.setAttribute('aria-pressed', String(c === priceCategory));
-        b.addEventListener('click', () => { priceCategory = c; priceBrand = ''; draw(); });
-        return b;
-      }),
-    );
-    if (cats.length > 4) {
-      const sel = el('select', 'tab-select');
-      sel.setAttribute('aria-label', 'Más categorías');
-      const first = el('option', null, 'Más categorías…');
-      first.value = '';
-      sel.append(first, ...cats.slice(4).map((c) => { const o = el('option', null, c); o.value = c; return o; }));
-      if (cats.slice(4).includes(priceCategory)) {
-        sel.value = priceCategory;
-        sel.classList.add('on');
-      }
-      sel.addEventListener('change', () => { priceCategory = sel.value; priceBrand = ''; draw(); });
-      tabs.append(sel);
-    }
-
-    const terms = normalize(priceTerm).split(/\s+/).filter(Boolean);
-    const pool = items.filter((it) => (!priceCategory || categoryOf(it) === priceCategory) && matchesTerms(it, terms));
-    const brandOrder = byCountDesc(countBy(pool, brandKey));
-    brandsRow.replaceChildren(
-      ...['', ...brandOrder].map((k) => {
-        const b = el('button', 'chip', k ? brandName(k) : 'Todas las marcas');
-        b.type = 'button';
-        b.setAttribute('aria-pressed', String(k === priceBrand));
-        b.addEventListener('click', () => { priceBrand = k; draw(); });
-        return b;
-      }),
-    );
-
-    const groups = new Map();
-    for (const it of pool) {
-      const k = brandKey(it) || '~';
-      if (priceBrand && k !== priceBrand) continue;
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(it);
-    }
-    const keys = [...groups.keys()].sort((a, b) => (a === '~' ? 1 : b === '~' ? -1 : brandName(a).localeCompare(brandName(b), 'es')));
-    list.replaceChildren(
-      ...keys.map((k, i) => {
-        const det = el('details', 'acc');
-        if (i === 0 || priceBrand || terms.length) det.open = true;
-        const sum = el('summary');
-        sum.append(el('span', 'acc-name', k === '~' ? 'Otras marcas' : brandName(k)), el('span', 'acc-count', number.format(groups.get(k).length)), icon('down', 'acc-chevron'));
-        const rows = el('ul', 'acc-rows');
-        for (const it of groups.get(k).sort(SORTS.nombre)) {
-          const li = el('li', 'prow');
-          const info = el('div', 'prow-info');
-          const name = el('button', 'prow-name', it.nombre);
-          name.type = 'button';
-          name.addEventListener('click', () => showDetail(it));
-          const head = el('div', 'prow-head');
-          head.append(name, shareButton(it));
-          info.append(head, el('span', 'prow-code', [it.codigo, categoryOf(it)].filter(Boolean).join(' · ')));
-          const [label, kind] = stockBadge(it.disponible);
-          li.append(info, el('span', `badge ${kind}`, label), el('span', 'prow-price', priceText(it) || 'Consultar'), stepper(it, updateBar));
-          rows.append(li);
-        }
-        det.append(sum, rows);
-        return det;
-      }),
-    );
-    if (!keys.length) list.append(el('p', 'status', items.length ? 'No hay productos con esa búsqueda.' : 'Cargando catálogo…'));
-    updateBar();
-  }
-
-  search.addEventListener('input', () => { priceTerm = search.value; draw(); });
-  draw();
-  return wrap;
-}
-
 /* ---------- Carrito ---------- */
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -936,8 +938,8 @@ function pageCart() {
     const ic = el('span', 'cart-empty-icon');
     ic.append(icon('cart'));
     const btns = el('div', 'cta-btns');
-    btns.append(withIcon(link('#/productos', 'btn', 'Ver productos'), 'arrow', true), withIcon(link('#/precios', 'btn btn-outline', 'Lista de precios'), 'list'));
-    empty.append(ic, el('h2', null, 'Tu carrito está vacío'), el('p', 'muted', 'Agrega productos desde el catálogo o la lista de precios.'), btns);
+    btns.append(withIcon(link('#/productos', 'btn', 'Ver productos'), 'arrow', true));
+    empty.append(ic, el('h2', null, 'Tu carrito está vacío'), el('p', 'muted', 'Agrega productos desde el catálogo.'), btns);
     wrap.append(empty);
     return wrap;
   }
@@ -1023,12 +1025,46 @@ function checkoutForm() {
     return l;
   };
   const input = (props) => Object.assign(el('input', 'input'), props);
-  const nombre = input({ required: true, placeholder: 'Nombre y apellido', autocomplete: 'name', maxLength: 80, value: client.nombre || '' });
-  const telefono = input({ required: true, type: 'tel', placeholder: 'Ej. 0412 123 4567', autocomplete: 'tel', maxLength: 30, value: client.telefono || '' });
+  // Datos guardados antes del apellido aparte: «Ana Pérez» se reparte en los dos campos.
+  let [savedNombre, savedApellido] = [client.nombre || '', client.apellido || ''];
+  if (!client.apellido && savedNombre.includes(' ')) [savedNombre, savedApellido] = [savedNombre.slice(0, savedNombre.indexOf(' ')), savedNombre.slice(savedNombre.indexOf(' ') + 1)];
+  const nombre = input({ required: true, placeholder: 'Ej. María', autocomplete: 'given-name', maxLength: 40, value: savedNombre });
+  const apellido = input({ required: true, placeholder: 'Ej. González', autocomplete: 'family-name', maxLength: 40, value: savedApellido });
   const cedula = input({ required: true, placeholder: 'Ej. V12345678', autocomplete: 'off', maxLength: 20, value: client.cedula || '' });
-  const pair = el('div', 'two');
-  pair.append(field('Cédula *', cedula), field('Teléfono *', telefono));
-  form.append(field('Nombre *', nombre), pair);
+  const telefono = input({ required: true, type: 'tel', inputMode: 'tel', placeholder: 'Ej. 0412-1234567', autocomplete: 'tel-national', maxLength: 20, value: client.telefono || '' });
+  const controls = { nombre, apellido, cedula, telefono };
+  const hints = {};
+  const withHint = (label, k) => {
+    const f = field(label, controls[k]);
+    hints[k] = el('small', 'field-error');
+    hints[k].hidden = true;
+    hints[k].id = `pedido-${k}-error`;
+    controls[k].setAttribute('aria-describedby', hints[k].id);
+    f.append(hints[k]);
+    return f;
+  };
+  const showErrors = (errores = {}) => {
+    for (const [k, c] of Object.entries(controls)) {
+      const msg = errores[k] || '';
+      c.setCustomValidity(msg);
+      c.setAttribute('aria-invalid', msg ? 'true' : 'false');
+      hints[k].textContent = msg;
+      hints[k].hidden = !msg;
+    }
+  };
+  // Al corregir un campo se quita su aviso.
+  for (const [k, c] of Object.entries(controls)) {
+    c.addEventListener('input', () => {
+      c.setCustomValidity('');
+      c.removeAttribute('aria-invalid');
+      hints[k].hidden = true;
+    });
+  }
+  const pairName = el('div', 'two');
+  pairName.append(withHint('Nombre *', 'nombre'), withHint('Apellido *', 'apellido'));
+  const pairId = el('div', 'two');
+  pairId.append(withHint('Cédula *', 'cedula'), withHint('Celular *', 'telefono'));
+  form.append(pairName, pairId, el('p', 'small muted form-note', `Todos los datos son obligatorios. Celular: ${PREFIJOS_CELULAR.join(', ')}.`));
 
   let entrega = '';
   const direccion = el('textarea', 'input');
@@ -1092,19 +1128,31 @@ function checkoutForm() {
 
   box.append(el('h2', null, 'Datos para tu pedido'), form);
 
+  form.noValidate = true;
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    const revision = revisarCliente({ nombre: nombre.value, apellido: apellido.value, cedula: cedula.value, telefono: telefono.value });
+    showErrors(revision.errores);
+    if (revision.errores) {
+      controls[Object.keys(revision.errores)[0]].focus();
+      return;
+    }
+    if (!form.checkValidity()) return form.reportValidity();
+    const cli = revision.datos;
+    for (const k of Object.keys(controls)) controls[k].value = cli[k];
     const datos = {
       numero: orderNumber(),
-      nombre: nombre.value.trim(),
-      telefono: telefono.value.trim(),
-      cedula: cedula.value.trim(),
+      nombre: `${cli.nombre} ${cli.apellido}`,
+      nombrePila: cli.nombre,
+      apellido: cli.apellido,
+      telefono: cli.telefono,
+      cedula: cli.cedula,
       entrega,
       direccion: dirField.hidden ? '' : direccion.value.trim(),
       pago: pago ? pago.value : '',
       notas: notas.value.trim(),
     };
-    try { localStorage.setItem('cliente', JSON.stringify({ nombre: datos.nombre, telefono: datos.telefono, cedula: datos.cedula })); } catch {}
+    try { localStorage.setItem('cliente', JSON.stringify({ nombre: cli.nombre, apellido: cli.apellido, telefono: cli.telefono, cedula: cli.cedula })); } catch {}
     if (online) return sendOrder(datos);
     const text = orderText(datos);
     if (CONTACT.whatsapp) window.open(waLink(text), '_blank', 'noopener');
@@ -1127,7 +1175,7 @@ function checkoutForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          nombre: datos.nombre, telefono: datos.telefono, cedula: datos.cedula, entrega: datos.entrega, direccion: datos.direccion,
+          nombre: datos.nombrePila, apellido: datos.apellido, telefono: datos.telefono, cedula: datos.cedula, entrega: datos.entrega, direccion: datos.direccion,
           pago: datos.pago, notas: datos.notas, moneda: CURRENCY_CODES[cur], sitio: trap.value,
           items: lines.map(([it, n]) => ({ codigo: it.codigo, cantidad: n })),
         }),
@@ -1145,6 +1193,7 @@ function checkoutForm() {
     submit.disabled = false;
     span.textContent = label;
     const known = res && [400, 409, 429].includes(res.status) && data?.error;
+    if (res?.status === 400 && data?.campos && typeof data.campos === 'object') showErrors(data.campos);
     errorBox.replaceChildren(el('p', null, known ? data.error : 'No pudimos enviar tu pedido en este momento. Intenta de nuevo en unos minutos.'));
     if (res?.status === 409) errorBox.append(el('p', 'small', 'Ajusta las cantidades en tu carrito y vuelve a enviarlo.'));
     if (!known && CONTACT.whatsapp) {
@@ -1465,11 +1514,13 @@ function fillFooter() {
   $('foot-contact').hidden = false;
 }
 
-const PAGES = { inicio: pageHome, productos: pageProducts, precios: pagePrices, carrito: pageCart, nosotros: pageAbout, contacto: pageContact };
-const TITLES = { inicio: 'Tienda de tecnología', productos: 'Productos', precios: 'Lista de precios', carrito: 'Carrito', nosotros: 'Nosotros', contacto: 'Contacto' };
+const PAGES = { inicio: pageHome, productos: pageProducts, carrito: pageCart, nosotros: pageAbout, contacto: pageContact };
+const TITLES = { inicio: 'Tienda de tecnología', productos: 'Productos', carrito: 'Carrito', nosotros: 'Nosotros', contacto: 'Contacto' };
 let lastPage = '';
 
 function render() {
+  // La lista de precios ya no existe: sus enlaces viejos llevan al catálogo.
+  if (parseRoute().page === 'precios') history.replaceState(null, '', '#/productos');
   const { page, params } = parseRoute();
   const name = PAGES[page] ? page : 'inicio';
   app.dataset.page = name;
