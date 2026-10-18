@@ -1,4 +1,7 @@
-import { STOCK_SQL, PHOTO_SQL, toPublicItem, localPhotoPath } from './query.js';
+import { STOCK_SQL, PHOTO_SQL, PROMOS_SQL, toPublicItem, toPublicPromo, localPhotoPath } from './query.js';
+
+// Sin la vista de promociones (MN Tech aún sin el módulo) o sin permiso sobre ella: no hay promociones.
+const SIN_PROMOS = new Set(['42P01', '42501']);
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const PHOTO_TYPES = /^image\/(jpeg|png|webp|gif|avif)$/;
@@ -65,6 +68,17 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
       } catch (err) {
         log.error('Error leyendo el stock:', err.message);
         return send(res, 503, { error: 'Stock no disponible' });
+      }
+    }
+
+    if (pathname === '/promociones') {
+      try {
+        const { rows } = await query(PROMOS_SQL);
+        return send(res, 200, rows.map(toPublicPromo).filter(Boolean));
+      } catch (err) {
+        if (SIN_PROMOS.has(err.code)) return send(res, 200, []);
+        log.error('Error leyendo las promociones:', err.message);
+        return send(res, 503, { error: 'Promociones no disponibles' });
       }
     }
 

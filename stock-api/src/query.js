@@ -86,3 +86,41 @@ export function toPublicItem(row) {
     especificaciones: publicSpecs(row.template_fields, row.specs),
   };
 }
+
+// Promociones que Yvan arma en MN Tech (módulo «Promociones de la web»). Solo se lee la vista
+// web_promociones_vigentes, que ya deja fuera las vencidas, las inactivas y los productos que no se venden;
+// el rol mnstock tiene SELECT sobre la vista, nunca sobre la tabla. De las categorías se mandan los nombres
+// (la de la promoción y sus subcategorías), que es lo que la web conoce de cada producto.
+export const PROMOS_SQL = `
+  SELECT v.id, v.tipo, v.titulo, v.texto, v.etiqueta, v.producto_code, v.marca, v.categoria,
+         ARRAY(SELECT c.name FROM mnstore_categories c WHERE c.id = ANY(v.category_ids) ORDER BY c.name) AS categorias,
+         v.descuento_tipo, v.descuento_valor, v.precio_oferta
+  FROM web_promociones_vigentes v
+  ORDER BY v.orden, v.id
+`;
+
+const TIPOS_PROMO = new Set(['producto', 'marca', 'categoria', 'aviso']);
+const DESCUENTOS = new Set(['ninguno', 'porcentaje', 'precio']);
+const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+
+export function toPublicPromo(row) {
+  if (!TIPOS_PROMO.has(row.tipo)) return null;
+  const titulo = text(row.titulo, 80);
+  if (!titulo) return null;
+  const descuento = DESCUENTOS.has(row.descuento_tipo) ? row.descuento_tipo : 'ninguno';
+  const valor = money(row.descuento_valor);
+  return {
+    id: Number(row.id),
+    tipo: row.tipo,
+    titulo,
+    texto: text(row.texto, 300),
+    etiqueta: text(row.etiqueta, 30),
+    producto: row.tipo === 'producto' ? text(row.producto_code, 64) : null,
+    marca: row.tipo === 'marca' ? text(row.marca, 80) : null,
+    categoria: row.tipo === 'categoria' ? text(row.categoria, 120) : null,
+    categorias: row.tipo === 'categoria' && Array.isArray(row.categorias) ? row.categorias.filter((c) => typeof c === 'string') : [],
+    descuento,
+    porcentaje: descuento === 'porcentaje' && valor > 0 && valor < 100 ? valor : null,
+    precio_oferta: row.tipo === 'producto' && descuento !== 'ninguno' ? money(row.precio_oferta) : null,
+  };
+}

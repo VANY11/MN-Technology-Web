@@ -1,6 +1,7 @@
 import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
 import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
+import { aplicarPromos, etiquetaPromo } from './promos.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -22,6 +23,7 @@ const currency = $('currency');
 const detail = $('detail');
 
 let items = [];
+let promos = [];
 let loadError = false;
 let pedidosOnline = false; // la web guarda el pedido en el sistema MN Tech (GET /api/pedido)
 // Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
@@ -75,6 +77,15 @@ const priceText = (item, key = currency.value) => {
   const value = item[key];
   return value === null || value === undefined ? null : FORMATS[key].format(value);
 };
+// Precio de antes (tachado) de un producto en oferta.
+const wasText = (item, key = currency.value) => {
+  const value = item.antes?.[key];
+  return value === null || value === undefined ? null : FORMATS[key].format(value);
+};
+function promoBadge(box, item) {
+  const tag = etiquetaPromo(item);
+  if (tag) box.append(el('span', 'promo-badge', tag));
+}
 const plural = (n, one, many) => `${number.format(n)} ${n === 1 ? one : many}`;
 const waLink = (text) => `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(text)}`;
 // Permite cortar «Cámaras/Videovigilancia» después de la barra.
@@ -235,6 +246,7 @@ function productCard(item) {
 
   const photo = el('div', 'photo');
   photoInto(photo, item);
+  promoBadge(photo, item);
   li.append(photo);
 
   const body = el('div', 'body');
@@ -245,7 +257,9 @@ function productCard(item) {
   const [label, kind] = stockBadge(item.disponible);
   body.append(withIcon(el('span', `badge ${kind}`, label), 'box'));
   const price = priceText(item);
-  body.append(price ? el('p', 'price', price) : el('p', 'price none', 'Consultar precio'));
+  const priceEl = price ? el('p', 'price', price) : el('p', 'price none', 'Consultar precio');
+  if (price && wasText(item)) priceEl.append(el('s', 'was', wasText(item)));
+  body.append(priceEl);
   const btn = withIcon(el('button', 'btn btn-outline', 'Ver detalles'), 'arrow', true);
   btn.type = 'button';
   btn.addEventListener('click', () => showDetail(item));
@@ -277,6 +291,7 @@ function miniCard(item) {
 
 function showDetail(item) {
   photoInto($('detail-photo'), item);
+  promoBadge($('detail-photo'), item);
   $('detail-brand').textContent = [brandKey(item) && brandName(brandKey(item)), categoryOf(item)].filter(Boolean).join(' · ');
   $('detail-name').textContent = item.nombre;
   $('detail-meta').textContent = [item.modelo && `Modelo ${item.modelo}`, item.ram && `RAM ${item.ram}`, item.almacenamiento, item.color]
@@ -295,7 +310,9 @@ function showDetail(item) {
     .filter(([, t]) => t)
     .map(([k, t]) => {
       const div = el('div');
-      div.append(el('dt', null, CURRENCY_NAMES[k]), el('dd', null, t));
+      const dd = el('dd', null, t);
+      if (wasText(item, k)) dd.append(el('s', 'was', wasText(item, k)));
+      div.append(el('dt', null, CURRENCY_NAMES[k]), dd);
       return div;
     });
   $('detail-prices').replaceChildren(...(rows.length ? rows : [el('p', 'muted', 'Consulta el precio con nosotros.')]));
@@ -428,15 +445,110 @@ function showcaseItems() {
   return [...withPhoto, ...rest].slice(0, SHOWCASE_SIZE);
 }
 
+// Lo que gira en la vitrina: primero las promociones de MN Tech (en su orden), después los equipos.
+//   { it, promo? }           un producto (con su oferta si la tiene)
+//   { promo, muestra, n, href } una marca o categoría en oferta, con la foto de uno de sus productos
+//   { promo }                 un aviso informativo
+function showcaseSlides() {
+  const slides = [];
+  const used = new Set();
+  for (const p of promos) {
+    if (p.tipo === 'producto') {
+      const it = items.find((x) => x.codigo === p.producto && x.disponible > 0);
+      if (it && !used.has(it)) { used.add(it); slides.push({ it, promo: p }); }
+    } else if (p.tipo === 'marca' || p.tipo === 'categoria') {
+      const list = items.filter((x) => x.disponible > 0 && x.promo === p);
+      if (!list.length) continue;
+      const muestra = list.find((x) => safePhoto(x.foto)) || list[0];
+      const cats = [...new Set(list.map((x) => x.categoria))];
+      const href = p.tipo === 'marca' ? productsHref({ marca: brandKey(muestra) }) : productsHref({ categoria: cats.length === 1 ? cats[0] : p.categoria });
+      slides.push({ promo: p, muestra, n: list.length, href });
+    } else if (p.tipo === 'aviso') slides.push({ promo: p });
+  }
+  for (const it of showcaseItems()) {
+    if (slides.length >= SHOWCASE_SIZE) break;
+    if (!used.has(it)) slides.push({ it, promo: it.promo || null });
+  }
+  return slides;
+}
+
+function slidePhoto(box, slide) {
+  if (slide.it || slide.muestra) {
+    photoInto(box, slide.it || slide.muestra);
+    if (slide.it) promoBadge(box, slide.it);
+  } else {
+    // Aviso: el logo de MN Tech en la vitrina.
+    const img = el('img', 'sc-logo');
+    img.src = '/logo-mn.png';
+    img.alt = 'MN Technology';
+    box.replaceChildren(img);
+  }
+}
+
 function urgency(n) {
   if (n === 1) return ['¡Última unidad!', 'hot'];
   if (n <= LOW_STOCK) return [`¡Quedan ${n}!`, 'hot'];
   return [`${number.format(n)} disponibles`, 'ok'];
 }
 
+// Diapositiva de un producto: precio (y el de antes si está en oferta), cuántos quedan y botones.
+function productSlide(it, promo) {
+  const tags = el('div', 'sc-tags');
+  tags.append(
+    promo ? el('span', 'sc-live sc-offer', 'Oferta') : el('span', 'sc-live', 'En vitrina'),
+    el('span', 'sc-cat', [brandKey(it) && brandName(brandKey(it)), categoryOf(it)].filter(Boolean).join(' · ')),
+  );
+  const out = [tags, el('h1', 'sc-name', it.nombre)];
+  if (promo && (promo.tipo === 'producto' || promo.texto)) {
+    const p = el('p', 'sc-promo', promo.tipo === 'producto' ? promo.titulo : promo.texto);
+    if (promo.tipo === 'producto' && promo.texto) p.append(el('span', null, promo.texto));
+    out.push(p);
+  }
+  const prices = el('div', 'sc-prices');
+  const main = currency.value;
+  const others = Object.keys(FORMATS).filter((k) => k !== main && hasPrice(it, k));
+  const big = el('span', 'sc-price-row');
+  big.append(el('span', 'sc-price', priceText(it, main) || priceText(it, 'precio')));
+  const was = wasText(it, main) || wasText(it, 'precio');
+  if (was) big.append(el('s', 'sc-was', was));
+  prices.append(big);
+  if (others.length) prices.append(el('span', 'sc-alt', others.map((k) => priceText(it, k)).join('  ·  ')));
+  const [label, kind] = urgency(it.disponible);
+  const stock = withIcon(el('span', `sc-stock ${kind}`, label), 'box');
+  const actions = el('div', 'sc-actions');
+  const see = withIcon(el('button', 'btn btn-light', 'Ver detalles'), 'arrow', true);
+  see.type = 'button';
+  see.addEventListener('click', () => showDetail(it));
+  const add = withIcon(el('button', 'btn btn-ghost-light', 'Agregar'), 'cart');
+  add.type = 'button';
+  add.addEventListener('click', () => addToCart(it));
+  const share = shareButton(it);
+  share.classList.add('sc-share');
+  actions.append(see, add, share);
+  out.push(prices, stock, actions);
+  return out;
+}
+
+// Diapositiva de una marca o categoría en oferta, o de un aviso.
+function promoSlide({ promo, n, href }) {
+  const tags = el('div', 'sc-tags');
+  tags.append(el('span', `sc-live ${promo.tipo === 'aviso' ? 'sc-notice' : 'sc-offer'}`, promo.tipo === 'aviso' ? 'Aviso' : 'Promoción'));
+  if (promo.etiqueta) tags.append(el('span', 'promo-chip', promo.etiqueta));
+  else if (promo.porcentaje) tags.append(el('span', 'promo-chip', `-${promo.porcentaje}%`));
+  const out = [tags, el('h1', 'sc-name', promo.titulo)];
+  if (promo.texto) out.push(el('p', 'sc-text', promo.texto));
+  if (href) {
+    out.push(withIcon(el('span', 'sc-stock ok', `${plural(n, 'producto', 'productos')} en oferta`), 'tag'));
+    const actions = el('div', 'sc-actions');
+    actions.append(withIcon(link(href, 'btn btn-light', 'Ver productos'), 'arrow', true));
+    out.push(actions);
+  }
+  return out;
+}
+
 function showcase() {
   clearInterval(showcaseTimer);
-  const list = showcaseItems();
+  const list = showcaseSlides();
   const sec = el('section', 'showcase');
   sec.setAttribute('aria-roledescription', 'carrusel');
   sec.setAttribute('aria-label', 'Vitrina');
@@ -464,45 +576,26 @@ function showcase() {
 
   const show = (i) => {
     index = (i + list.length) % list.length;
-    const it = list[index];
+    const slide = list[index];
     photo.classList.remove('sc-in');
     void photo.offsetWidth; // reinicia la animación de entrada
     photo.classList.add('sc-in');
-    photoInto(photo, it);
-    const tags = el('div', 'sc-tags');
-    tags.append(el('span', 'sc-live', 'En vitrina'), el('span', 'sc-cat', [brandKey(it) && brandName(brandKey(it)), categoryOf(it)].filter(Boolean).join(' · ')));
-    const name = el('h1', 'sc-name', it.nombre);
-    const prices = el('div', 'sc-prices');
-    const main = currency.value;
-    const others = Object.keys(FORMATS).filter((k) => k !== main && hasPrice(it, k));
-    prices.append(el('span', 'sc-price', priceText(it, main) || priceText(it, 'precio')));
-    if (others.length) prices.append(el('span', 'sc-alt', others.map((k) => priceText(it, k)).join('  ·  ')));
-    const [label, kind] = urgency(it.disponible);
-    const stock = withIcon(el('span', `sc-stock ${kind}`, label), 'box');
-    const actions = el('div', 'sc-actions');
-    const see = withIcon(el('button', 'btn btn-light', 'Ver detalles'), 'arrow', true);
-    see.type = 'button';
-    see.addEventListener('click', () => showDetail(it));
-    const add = withIcon(el('button', 'btn btn-ghost-light', 'Agregar'), 'cart');
-    add.type = 'button';
-    add.addEventListener('click', () => addToCart(it));
-    const share = shareButton(it);
-    share.classList.add('sc-share');
-    actions.append(see, add, share);
-    info.replaceChildren(tags, name, prices, stock, actions);
+    slidePhoto(photo, slide);
+    info.replaceChildren(...(slide.it ? productSlide(slide.it, slide.promo) : promoSlide(slide)));
     for (const [j, b] of [...thumbs.children].entries()) b.firstChild.setAttribute('aria-current', String(j === index));
     fill.style.animation = 'none';
     void fill.offsetWidth;
     fill.style.animation = '';
   };
 
-  list.forEach((it, j) => {
+  list.forEach((slide, j) => {
     const li = el('li');
     const b = el('button', 'sc-thumb');
     b.type = 'button';
-    b.setAttribute('aria-label', it.nombre);
+    b.setAttribute('aria-label', slide.it ? slide.it.nombre : slide.promo.titulo);
     const ph = el('span', 'sc-thumb-photo');
-    photoInto(ph, it);
+    if (slide.it || slide.muestra) photoInto(ph, slide.it || slide.muestra);
+    else ph.append(icon('tag', 'placeholder'));
     b.append(ph);
     b.addEventListener('click', () => { show(j); restart(); });
     li.append(b);
@@ -1031,11 +1124,39 @@ function checkoutForm() {
   const nombre = input({ required: true, placeholder: 'Ej. María', autocomplete: 'given-name', maxLength: 40, value: savedNombre });
   const apellido = input({ required: true, placeholder: 'Ej. González', autocomplete: 'family-name', maxLength: 40, value: savedApellido });
   const cedula = input({ required: true, placeholder: 'Ej. V12345678', autocomplete: 'off', maxLength: 20, value: client.cedula || '' });
-  const telefono = input({ required: true, type: 'tel', inputMode: 'tel', placeholder: 'Ej. 0412-1234567', autocomplete: 'tel-national', maxLength: 20, value: client.telefono || '' });
+  // Celular: prefijo en una lista y los 7 dígitos aparte.
+  const [savedPrefijo, savedNumero] = /^(0\d{3})-?(\d{7})$/.test(client.telefono || '') ? [client.telefono.slice(0, 4), client.telefono.replace(/\D/g, '').slice(4)] : ['', ''];
+  const prefijo = el('select', 'phone-prefix');
+  prefijo.setAttribute('aria-label', 'Prefijo del celular');
+  const sinPrefijo = el('option', null, 'Prefijo');
+  sinPrefijo.value = '';
+  sinPrefijo.disabled = true;
+  prefijo.append(sinPrefijo, ...PREFIJOS_CELULAR.map((p) => { const o = el('option', null, p); o.value = p; return o; }));
+  prefijo.value = PREFIJOS_CELULAR.includes(savedPrefijo) ? savedPrefijo : '';
+  const telefono = input({ required: true, type: 'tel', inputMode: 'numeric', placeholder: '1234567', autocomplete: 'off', maxLength: 16, value: savedNumero });
+  telefono.setAttribute('aria-label', 'Número del celular, 7 dígitos');
+  // Si pegan el número completo (04141234567 o +58 414…), se reparte entre la lista y el campo.
+  telefono.addEventListener('input', () => {
+    let d = telefono.value.replace(/\D/g, '');
+    if (d.startsWith('58') && d.length >= 12) d = `0${d.slice(2)}`;
+    if (d.length >= 10 && !d.startsWith('0')) d = `0${d}`;
+    if (d.length === 11 && PREFIJOS_CELULAR.includes(d.slice(0, 4))) {
+      prefijo.value = d.slice(0, 4);
+      telefono.value = d.slice(4);
+    }
+  });
+  prefijo.addEventListener('change', () => telefono.dispatchEvent(new Event('input')));
   const controls = { nombre, apellido, cedula, telefono };
   const hints = {};
   const withHint = (label, k) => {
-    const f = field(label, controls[k]);
+    let f;
+    if (k === 'telefono') {
+      // Dos controles: un <div> en vez de <label>, cada uno con su propio nombre accesible.
+      f = el('div', 'field');
+      const row = el('div', 'phone-row');
+      row.append(prefijo, telefono);
+      f.append(el('span', null, label), row);
+    } else f = field(label, controls[k]);
     hints[k] = el('small', 'field-error');
     hints[k].hidden = true;
     hints[k].id = `pedido-${k}-error`;
@@ -1048,6 +1169,7 @@ function checkoutForm() {
       const msg = errores[k] || '';
       c.setCustomValidity(msg);
       c.setAttribute('aria-invalid', msg ? 'true' : 'false');
+      if (k === 'telefono') prefijo.setAttribute('aria-invalid', msg && !prefijo.value ? 'true' : 'false');
       hints[k].textContent = msg;
       hints[k].hidden = !msg;
     }
@@ -1057,14 +1179,13 @@ function checkoutForm() {
     c.addEventListener('input', () => {
       c.setCustomValidity('');
       c.removeAttribute('aria-invalid');
+      if (k === 'telefono') prefijo.removeAttribute('aria-invalid');
       hints[k].hidden = true;
     });
   }
   const pairName = el('div', 'two');
   pairName.append(withHint('Nombre *', 'nombre'), withHint('Apellido *', 'apellido'));
-  const pairId = el('div', 'two');
-  pairId.append(withHint('Cédula *', 'cedula'), withHint('Celular *', 'telefono'));
-  form.append(pairName, pairId, el('p', 'small muted form-note', `Todos los datos son obligatorios. Celular: ${PREFIJOS_CELULAR.join(', ')}.`));
+  form.append(pairName, withHint('Cédula *', 'cedula'), withHint('Celular *', 'telefono'), el('p', 'small muted form-note', 'Todos los datos son obligatorios.'));
 
   let entrega = '';
   const direccion = el('textarea', 'input');
@@ -1131,15 +1252,18 @@ function checkoutForm() {
   form.noValidate = true;
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const revision = revisarCliente({ nombre: nombre.value, apellido: apellido.value, cedula: cedula.value, telefono: telefono.value });
+    const revision = revisarCliente({ nombre: nombre.value, apellido: apellido.value, cedula: cedula.value, telefono: `${prefijo.value}${telefono.value}` });
+    if (!prefijo.value) revision.errores = { ...revision.errores, telefono: 'Elige el prefijo de tu celular.' };
     showErrors(revision.errores);
     if (revision.errores) {
-      controls[Object.keys(revision.errores)[0]].focus();
+      const first = Object.keys(revision.errores)[0];
+      (first === 'telefono' && !prefijo.value ? prefijo : controls[first]).focus();
       return;
     }
     if (!form.checkValidity()) return form.reportValidity();
     const cli = revision.datos;
-    for (const k of Object.keys(controls)) controls[k].value = cli[k];
+    for (const k of ['nombre', 'apellido', 'cedula']) controls[k].value = cli[k];
+    telefono.value = cli.telefono.slice(5);
     const datos = {
       numero: orderNumber(),
       nombre: `${cli.nombre} ${cli.apellido}`,
@@ -1570,6 +1694,11 @@ async function load() {
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => { pedidosOnline = d?.activo === true; })
     .catch(() => {});
+  // Sin promociones (o si fallan) la tienda funciona igual.
+  const cargaPromos = fetch('/api/promociones', { headers: { Accept: 'application/json' } })
+    .then((r) => (r.ok ? r.json() : []))
+    .then((d) => { promos = Array.isArray(d) ? d : []; })
+    .catch(() => {});
   try {
     const res = await fetch('/api/stock', { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(String(res.status));
@@ -1577,7 +1706,8 @@ async function load() {
   } catch {
     loadError = true;
   }
-  await estadoPedidos;
+  await Promise.all([estadoPedidos, cargaPromos]);
+  aplicarPromos(items, promos);
   buildBrandNames();
   if (!loadError) syncCart();
   fillFooter();
