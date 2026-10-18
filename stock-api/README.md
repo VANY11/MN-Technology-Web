@@ -38,7 +38,7 @@ En la web, `/api/foto/<código>` la trae por el túnel y Cloudflare la guarda un
 web), leídas solo de la vista `web_promociones_vigentes` (la migración de MN Tech le da SELECT a `mnstock`):
 `id`, `tipo` (producto, marca, categoria o aviso), `titulo`, `texto`, `etiqueta`, `producto` (código),
 `marca`, `categoria`, `categorias` (la categoría y sus subcategorías, por nombre), `descuento`
-(ninguno, porcentaje o precio), `porcentaje` y `precio_oferta` (USD, solo productos). Mientras MN Tech no
+(ninguno, porcentaje o precio), `porcentaje`, `precio_oferta` (USD, solo productos) y `lugares` (vitrina, destacados y/o nuevos; si la vista aún no los tiene, vitrina y destacados). Mientras MN Tech no
 tenga la vista, responde `[]`. En la web, `/api/promociones` la trae por el túnel con 60 s de caché.
 
 `GET /health` responde `{"ok": true}`. Cualquier otro método da 405.

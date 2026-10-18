@@ -1,7 +1,7 @@
 import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
 import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
-import { aplicarPromos, etiquetaPromo } from './promos.js';
+import { aplicarPromos, etiquetaPromo, enLugar } from './promos.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -278,13 +278,89 @@ function miniCard(item) {
   btn.addEventListener('click', () => showDetail(item));
   const photo = el('div', 'mini-photo');
   photoInto(photo, item);
+  promoBadge(photo, item);
   const info = el('div', 'mini-info');
   info.append(el('span', 'mini-cat', categoryOf(item)), el('span', 'mini-name', item.nombre));
   if (item.codigo) info.append(el('span', 'mini-code', `Código: ${item.codigo}`));
-  info.append(el('span', 'mini-price', priceText(item) || 'Consultar precio'));
+  const price = el('span', 'mini-price', priceText(item) || 'Consultar precio');
+  if (wasText(item)) price.append(el('s', 'was', wasText(item)));
+  info.append(price);
   btn.append(photo, info);
   li.append(btn);
   return li;
+}
+
+// Tarjeta de una promoción que no es un solo producto: una marca o categoría (lleva a sus productos)
+// o un aviso / servicio (solo informa, con el logo de MN Tech).
+function promoMiniCard(p) {
+  const li = el('li', 'mini');
+  const list = p.tipo === 'aviso' ? [] : promoItems(p);
+  if (p.tipo !== 'aviso' && !list.length) return null;
+  const muestra = list.find((x) => safePhoto(x.foto)) || list[0];
+  const box = p.tipo === 'aviso'
+    ? el('div', 'mini-btn mini-static')
+    : link(p.tipo === 'marca' ? productsHref({ marca: brandKey(muestra) }) : productsHref({ categoria: [...new Set(list.map((x) => x.categoria))].length === 1 ? muestra.categoria : p.categoria }), 'mini-btn');
+  const photo = el('div', 'mini-photo');
+  if (muestra) photoInto(photo, muestra);
+  else {
+    const img = el('img', 'mini-logo');
+    img.src = '/logo-mn.png';
+    img.alt = '';
+    photo.append(img);
+  }
+  if (p.etiqueta) photo.append(el('span', 'promo-badge', p.etiqueta));
+  const info = el('div', 'mini-info');
+  info.append(el('span', 'mini-cat', p.tipo === 'aviso' ? 'Servicio' : p.tipo === 'marca' ? 'Marca' : 'Categoría'), el('span', 'mini-name', p.titulo));
+  if (p.texto) info.append(el('span', 'mini-text', p.texto));
+  if (list.length) info.append(el('span', 'mini-price', plural(list.length, 'producto', 'productos')));
+  box.append(photo, info);
+  li.append(box);
+  return li;
+}
+
+// Las tarjetas de una sección de la portada armada con promociones ('destacados' o 'nuevos'), en su orden.
+function promoCards(lugar) {
+  const out = [];
+  const used = new Set();
+  for (const p of promos.filter((x) => enLugar(x, lugar))) {
+    if (p.tipo === 'producto') {
+      const it = items.find((x) => x.codigo === p.producto && x.disponible > 0);
+      if (it && !used.has(it)) { used.add(it); out.push(miniCard(it)); }
+    } else if (lugar === 'nuevos' || p.tipo === 'aviso') {
+      const card = promoMiniCard(p);
+      if (card) out.push(card);
+    } else {
+      for (const it of promoItems(p)) {
+        if (used.has(it)) continue;
+        used.add(it);
+        out.push(miniCard(it));
+      }
+    }
+  }
+  return { cards: out, used };
+}
+
+// Fila deslizable con flechas (Destacados, Nuevos).
+function carouselSection(title, cards, subtitle) {
+  const sec = el('section', 'section wrap');
+  const h = el('div', 'section-head');
+  const arrows = el('div', 'arrows');
+  const row = el('ul', 'carousel');
+  for (const [key, dir, label] of [['left', -1, 'Anteriores'], ['right', 1, 'Siguientes']]) {
+    const b = el('button', 'arrow-btn');
+    b.type = 'button';
+    b.setAttribute('aria-label', label);
+    b.append(icon(key));
+    b.addEventListener('click', () => row.scrollBy({ left: dir * row.clientWidth * 0.9, behavior: 'smooth' }));
+    arrows.append(b);
+  }
+  const titles = el('div');
+  titles.append(el('h2', null, title));
+  if (subtitle) titles.append(el('p', 'muted section-sub', subtitle));
+  h.append(titles, arrows);
+  row.append(...cards);
+  sec.append(h, row);
+  return sec;
 }
 
 /* ---------- Detalle ---------- */
@@ -452,12 +528,12 @@ function showcaseItems() {
 function showcaseSlides() {
   const slides = [];
   const used = new Set();
-  for (const p of promos) {
+  for (const p of promos.filter((x) => enLugar(x, 'vitrina'))) {
     if (p.tipo === 'producto') {
       const it = items.find((x) => x.codigo === p.producto && x.disponible > 0);
       if (it && !used.has(it)) { used.add(it); slides.push({ it, promo: p }); }
     } else if (p.tipo === 'marca' || p.tipo === 'categoria') {
-      const list = items.filter((x) => x.disponible > 0 && x.promo === p);
+      const list = promoItems(p);
       if (!list.length) continue;
       const muestra = list.find((x) => safePhoto(x.foto)) || list[0];
       const cats = [...new Set(list.map((x) => x.categoria))];
@@ -471,6 +547,9 @@ function showcaseSlides() {
   }
   return slides;
 }
+
+// Los productos con existencias a los que aplica una promoción de marca o categoría.
+const promoItems = (p) => items.filter((x) => x.disponible > 0 && x.promo === p);
 
 function slidePhoto(box, slide) {
   if (slide.it || slide.muestra) {
@@ -495,7 +574,7 @@ function urgency(n) {
 function productSlide(it, promo) {
   const tags = el('div', 'sc-tags');
   tags.append(
-    promo ? el('span', 'sc-live sc-offer', 'Oferta') : el('span', 'sc-live', 'En vitrina'),
+    it.antes ? el('span', 'sc-live sc-offer', 'Oferta') : el('span', 'sc-live', 'En vitrina'),
     el('span', 'sc-cat', [brandKey(it) && brandName(brandKey(it)), categoryOf(it)].filter(Boolean).join(' · ')),
   );
   const out = [tags, el('h1', 'sc-name', it.nombre)];
@@ -669,6 +748,10 @@ function pageHome() {
   }
   frag.append(features);
 
+  // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
+  const nuevos = promoCards('nuevos').cards;
+  if (nuevos.length) frag.append(carouselSection('Nuevo en MN Tech', nuevos, 'Recién llegados, reposiciones y servicios nuevos'));
+
   // Marcas en movimiento (la lista va dos veces para que el desplazamiento no tenga cortes).
   const brands = byCountDesc(countBy(items, brandKey)).slice(0, 24);
   if (brands.length) {
@@ -706,28 +789,14 @@ function pageHome() {
   catSec.append(tiles);
   frag.append(catSec);
 
-  // Destacados: con foto primero, luego los de más existencias.
+  // Destacados: primero lo que Yvan marca en MN Tech; después, con foto primero y los de más existencias.
+  const marcados = promoCards('destacados');
   const featured = [...items]
+    .filter((it) => !marcados.used.has(it))
     .sort((a, b) => (safePhoto(b.foto) ? 1 : 0) - (safePhoto(a.foto) ? 1 : 0) || b.disponible - a.disponible)
-    .slice(0, 16);
-  if (featured.length) {
-    const sec = el('section', 'section wrap');
-    const h = el('div', 'section-head');
-    const arrows = el('div', 'arrows');
-    const row = el('ul', 'carousel');
-    for (const [key, dir, label] of [['left', -1, 'Anteriores'], ['right', 1, 'Siguientes']]) {
-      const b = el('button', 'arrow-btn');
-      b.type = 'button';
-      b.setAttribute('aria-label', label);
-      b.append(icon(key));
-      b.addEventListener('click', () => row.scrollBy({ left: dir * row.clientWidth * 0.9, behavior: 'smooth' }));
-      arrows.append(b);
-    }
-    h.append(el('h2', null, 'Destacados'), arrows);
-    row.append(...featured.map(miniCard));
-    sec.append(h, row);
-    frag.append(sec);
-  }
+    .slice(0, Math.max(0, 16 - marcados.cards.length));
+  const destacados = [...marcados.cards, ...featured.map(miniCard)];
+  if (destacados.length) frag.append(carouselSection('Destacados', destacados));
 
   const cta = el('section', 'cta-band wrap');
   const inner = el('div', 'cta-inner');

@@ -53,3 +53,6 @@ export function etiquetaPromo(item) {
   if (p.porcentaje) return `-${p.porcentaje}%`;
   return 'Oferta';
 }
+
+// Dónde la quiere Yvan: 'vitrina', 'destacados' y/o 'nuevos' (sin el dato, vitrina y destacados).
+export const enLugar = (p, lugar) => (Array.isArray(p.lugares) ? p.lugares : ['vitrina', 'destacados']).includes(lugar);

@@ -39,3 +39,11 @@ test('pone el precio de oferta en las tres monedas y guarda el de antes', () => 
   assert.equal(otro.promo, undefined);
   assert.deepEqual([etiquetaPromo(a16), etiquetaPromo(forroSamsung), etiquetaPromo(forroXiaomi), etiquetaPromo(caro)], ['Oferta', 'Semana Samsung', '-10%', null]);
 });
+
+test('lugares: sin el dato, vitrina y destacados', async () => {
+  const { enLugar } = await import('../public/promos.js');
+  assert.equal(enLugar({}, 'vitrina'), true);
+  assert.equal(enLugar({}, 'nuevos'), false);
+  assert.equal(enLugar({ lugares: ['nuevos'] }, 'nuevos'), true);
+  assert.equal(enLugar({ lugares: ['nuevos'] }, 'vitrina'), false);
+});

@@ -633,3 +633,10 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
 .sc-promo span { color: rgb(255 255 255 / 0.75); font-size: 15px; font-weight: 500; }
 .sc-text { margin: -2px 0 0; max-width: 46ch; color: rgb(255 255 255 / 0.8); font-size: 17px; line-height: 1.5; }
 .sc-photo img.sc-logo { padding: 8%; object-fit: contain; filter: drop-shadow(0 8px 24px rgb(139 92 246 / 0.45)); }
+.mini-photo .promo-badge { top: 4px; left: 4px; padding: 2px 6px; font-size: 10px; border-radius: 6px; }
+.mini-photo img.mini-logo { padding: 10px; }
+.mini-static { cursor: default; }
+.mini-static:hover { border-color: var(--line); }
+.mini-text { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.section-sub { margin: 2px 0 0; font-size: 14px; }
+a.mini-btn { text-decoration: none; }
