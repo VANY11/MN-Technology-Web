@@ -357,19 +357,9 @@ function shareButton(item) {
   return btn;
 }
 
-// En el teléfono, el menú del sistema (WhatsApp, Instagram, etc.); si no hay, nuestro menú.
-async function shareProduct(item) {
-  const url = productUrl(item);
-  const text = shareText(item);
-  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
-    try {
-      await navigator.share({ title: item.nombre, text, url });
-      return;
-    } catch (e) {
-      if (e?.name === 'AbortError') return;
-    }
-  }
-  openShareMenu(item, url, text);
+// Siempre nuestro menú (funciona en todo navegador); «Más opciones» abre el menú del sistema si existe.
+function shareProduct(item) {
+  openShareMenu(item, productUrl(item), shareText(item));
 }
 
 function openShareMenu(item, url, text) {
@@ -390,6 +380,11 @@ function openShareMenu(item, url, text) {
       return a;
     }),
   );
+  const more = $('share-more');
+  more.hidden = typeof navigator.share !== 'function';
+  more.onclick = () => {
+    navigator.share({ title: item.nombre, text, url }).catch(() => {});
+  };
   const input = $('share-url');
   input.value = url;
   const copy = $('share-copy');
@@ -889,7 +884,9 @@ function pagePrices() {
           const name = el('button', 'prow-name', it.nombre);
           name.type = 'button';
           name.addEventListener('click', () => showDetail(it));
-          info.append(name, el('span', 'prow-code', [it.codigo, categoryOf(it)].filter(Boolean).join(' · ')));
+          const head = el('div', 'prow-head');
+          head.append(name, shareButton(it));
+          info.append(head, el('span', 'prow-code', [it.codigo, categoryOf(it)].filter(Boolean).join(' · ')));
           const [label, kind] = stockBadge(it.disponible);
           li.append(info, el('span', `badge ${kind}`, label), el('span', 'prow-price', priceText(it) || 'Consultar'), stepper(it, updateBar));
           rows.append(li);
