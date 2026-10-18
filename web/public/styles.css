@@ -618,3 +618,18 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- Promociones (las arma Yvan en MN Tech) ---------- */
+.promo-badge { position: absolute; top: 8px; left: 8px; z-index: 1; max-width: calc(100% - 16px); padding: 4px 9px; border-radius: 8px; background: linear-gradient(90deg, #e11d48, #f97316); color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .02em; box-shadow: 0 6px 16px -6px rgb(225 29 72 / 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail-photo .promo-badge, .sc-photo .promo-badge { top: 16px; left: 16px; font-size: 14px; padding: 6px 12px; border-radius: 10px; }
+.was { margin-left: 8px; color: var(--faint); font-size: .68em; font-weight: 600; text-decoration-thickness: 1.5px; }
+.sc-price-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; }
+.sc-was { color: rgb(255 255 255 / 0.55); font-size: clamp(18px, 2vw, 22px); font-weight: 700; text-decoration-thickness: 2px; }
+.sc-live.sc-offer { background: rgb(244 63 94 / 0.2); border-color: rgb(251 113 133 / 0.55); color: #fecdd3; }
+.sc-live.sc-notice { background: rgb(59 130 246 / 0.18); border-color: rgb(96 165 250 / 0.5); color: #bfdbfe; }
+.sc-live.sc-notice::before { background: #3b82f6; animation: none; }
+.promo-chip { padding: 5px 12px; border-radius: 999px; background: linear-gradient(90deg, #e11d48, #f97316); color: #fff; font-size: 13px; font-weight: 800; }
+.sc-promo { margin: -4px 0 0; display: grid; gap: 2px; color: #fda4af; font-size: 17px; font-weight: 800; }
+.sc-promo span { color: rgb(255 255 255 / 0.75); font-size: 15px; font-weight: 500; }
+.sc-text { margin: -2px 0 0; max-width: 46ch; color: rgb(255 255 255 / 0.8); font-size: 17px; line-height: 1.5; }
+.sc-photo img.sc-logo { padding: 8%; object-fit: contain; filter: drop-shadow(0 8px 24px rgb(139 92 246 / 0.45)); }

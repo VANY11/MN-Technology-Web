@@ -122,3 +122,34 @@ test('/foto no devuelve algo que no sea imagen', async () => {
     assert.equal((await fetch(`${base}/foto/A`)).status, 404);
   }, { fetchPhoto });
 });
+
+test('GET /promociones lee solo la vista y manda los campos públicos', async () => {
+  let sql = '';
+  const query = async (q) => {
+    sql = q;
+    return {
+      rows: [
+        { id: 3, tipo: 'producto', titulo: ' A16 en oferta ', texto: null, etiqueta: '-15%', producto_code: 'MN-0730', marca: 'x', categoria: null, categorias: [], descuento_tipo: 'precio', descuento_valor: '160.00', precio_oferta: '160.00' },
+        { id: 4, tipo: 'categoria', titulo: 'Forros', texto: 'Todos', etiqueta: null, producto_code: null, marca: null, categoria: 'Accesorios', categorias: ['Accesorios', 'Forros'], descuento_tipo: 'porcentaje', descuento_valor: '10', precio_oferta: null },
+        { id: 5, tipo: 'raro', titulo: 'x' },
+        { id: 6, tipo: 'aviso', titulo: '  ', descuento_tipo: 'ninguno' },
+      ],
+    };
+  };
+  await withServer(query, async (base) => {
+    const body = await (await fetch(`${base}/promociones`)).json();
+    assert.match(sql, /FROM web_promociones_vigentes v/);
+    assert.doesNotMatch(sql, /FROM web_promociones\b(?!_)/);
+    assert.deepEqual(body, [
+      { id: 3, tipo: 'producto', titulo: 'A16 en oferta', texto: null, etiqueta: '-15%', producto: 'MN-0730', marca: null, categoria: null, categorias: [], descuento: 'precio', porcentaje: null, precio_oferta: 160 },
+      { id: 4, tipo: 'categoria', titulo: 'Forros', texto: 'Todos', etiqueta: null, producto: null, marca: null, categoria: 'Accesorios', categorias: ['Accesorios', 'Forros'], descuento: 'porcentaje', porcentaje: 10, precio_oferta: null },
+    ]);
+  });
+});
+
+test('sin la vista de promociones responde una lista vacía; otro error, 503', async () => {
+  const fail = (code) => async () => { throw Object.assign(new Error('x'), { code }); };
+  await withServer(fail('42P01'), async (base) => assert.deepEqual(await (await fetch(`${base}/promociones`)).json(), []));
+  await withServer(fail('42501'), async (base) => assert.deepEqual(await (await fetch(`${base}/promociones`)).json(), []));
+  await withServer(fail('57014'), async (base) => assert.equal((await fetch(`${base}/promociones`)).status, 503));
+});

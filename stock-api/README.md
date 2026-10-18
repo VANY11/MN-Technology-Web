@@ -34,6 +34,13 @@ La pide a la app MN Tech local (`PHOTO_ORIGIN`, por defecto `http://127.0.0.1:11
 guardada en `foto_url`, y solo entrega imágenes (jpeg, png, webp, gif, avif) de hasta 8 MB.
 En la web, `/api/foto/<código>` la trae por el túnel y Cloudflare la guarda un día en caché.
 
+`GET /promociones` devuelve las promociones vigentes que se arman en MN Tech (módulo de promociones de la
+web), leídas solo de la vista `web_promociones_vigentes` (la migración de MN Tech le da SELECT a `mnstock`):
+`id`, `tipo` (producto, marca, categoria o aviso), `titulo`, `texto`, `etiqueta`, `producto` (código),
+`marca`, `categoria`, `categorias` (la categoría y sus subcategorías, por nombre), `descuento`
+(ninguno, porcentaje o precio), `porcentaje` y `precio_oferta` (USD, solo productos). Mientras MN Tech no
+tenga la vista, responde `[]`. En la web, `/api/promociones` la trae por el túnel con 60 s de caché.
+
 `GET /health` responde `{"ok": true}`. Cualquier otro método da 405.
 
 ## Instalación en el servidor (Ubuntu)
@@ -58,6 +65,17 @@ sudo systemctl enable --now mn-stock-api
 
 # 5. Prueba local
 curl http://127.0.0.1:8080/stock
+```
+
+## Actualizar el servidor
+
+```bash
+sudo rm -rf /tmp/mn-web
+sudo git clone -b claude/project-thread-2cmau5 https://github.com/VANY11/MN-Technology-Web.git /tmp/mn-web
+sudo cp -r /tmp/mn-web/stock-api/src /tmp/mn-web/stock-api/package.json /tmp/mn-web/stock-api/package-lock.json /opt/mn-stock-api/
+cd /opt/mn-stock-api && sudo npm ci --omit=dev
+sudo systemctl restart mn-stock-api
+curl http://127.0.0.1:8080/promociones
 ```
 
 La conexión a PostgreSQL usa el socket local con autenticación `peer`, que es la configuración
