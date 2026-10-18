@@ -1,7 +1,7 @@
 import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
 import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
-import { aplicarPromos, etiquetaPromo } from './promos.js';
+import { aplicarPromos, etiquetaPromo, enLugar } from './promos.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -98,6 +98,15 @@ const brandKey = (item) => {
   return k && !GENERIC.has(k) ? k : null;
 };
 let brandNames = new Map();
+
+// «Mundos MN»: los cuatro de los íconos del logo. Cada uno junta las categorías cuyo nombre encaja.
+const MUNDOS = [
+  { id: 'telefonia', nombre: 'Telefonía', texto: 'Celulares, forros, vidrios y cargadores', icono: 'phone', re: /telefon|celular|iphone|smartphone|vidrio|forro|cargador/ },
+  { id: 'gaming', nombre: 'Gaming', texto: 'Consolas, controles y accesorios', icono: 'gaming', re: /gam(er|ing)|consola|videojueg|control/ },
+  { id: 'seguridad', nombre: 'Seguridad', texto: 'Cámaras y videovigilancia', icono: 'camera', re: /camara|videovigil|seguridad|dvr|nvr/ },
+  { id: 'audio', nombre: 'Audio', texto: 'Audífonos, cornetas y más', icono: 'audio', re: /audio|audifono|auricular|corneta|parlante|bocina/ },
+];
+const mundoDe = (item) => MUNDOS.find((m) => m.re.test(normalize(item.categoria))) || null;
 
 function buildBrandNames() {
   const spellings = new Map();
@@ -278,13 +287,89 @@ function miniCard(item) {
   btn.addEventListener('click', () => showDetail(item));
   const photo = el('div', 'mini-photo');
   photoInto(photo, item);
+  promoBadge(photo, item);
   const info = el('div', 'mini-info');
   info.append(el('span', 'mini-cat', categoryOf(item)), el('span', 'mini-name', item.nombre));
   if (item.codigo) info.append(el('span', 'mini-code', `Código: ${item.codigo}`));
-  info.append(el('span', 'mini-price', priceText(item) || 'Consultar precio'));
+  const price = el('span', 'mini-price', priceText(item) || 'Consultar precio');
+  if (wasText(item)) price.append(el('s', 'was', wasText(item)));
+  info.append(price);
   btn.append(photo, info);
   li.append(btn);
   return li;
+}
+
+// Tarjeta de una promoción que no es un solo producto: una marca o categoría (lleva a sus productos)
+// o un aviso / servicio (solo informa, con el logo de MN Tech).
+function promoMiniCard(p) {
+  const li = el('li', 'mini');
+  const list = p.tipo === 'aviso' ? [] : promoItems(p);
+  if (p.tipo !== 'aviso' && !list.length) return null;
+  const muestra = list.find((x) => safePhoto(x.foto)) || list[0];
+  const box = p.tipo === 'aviso'
+    ? el('div', 'mini-btn mini-static')
+    : link(p.tipo === 'marca' ? productsHref({ marca: brandKey(muestra) }) : productsHref({ categoria: [...new Set(list.map((x) => x.categoria))].length === 1 ? muestra.categoria : p.categoria }), 'mini-btn');
+  const photo = el('div', 'mini-photo');
+  if (muestra) photoInto(photo, muestra);
+  else {
+    const img = el('img', 'mini-logo');
+    img.src = '/logo-mn.png';
+    img.alt = '';
+    photo.append(img);
+  }
+  if (p.etiqueta) photo.append(el('span', 'promo-badge', p.etiqueta));
+  const info = el('div', 'mini-info');
+  info.append(el('span', 'mini-cat', p.tipo === 'aviso' ? 'Servicio' : p.tipo === 'marca' ? 'Marca' : 'Categoría'), el('span', 'mini-name', p.titulo));
+  if (p.texto) info.append(el('span', 'mini-text', p.texto));
+  if (list.length) info.append(el('span', 'mini-price', plural(list.length, 'producto', 'productos')));
+  box.append(photo, info);
+  li.append(box);
+  return li;
+}
+
+// Las tarjetas de una sección de la portada armada con promociones ('destacados' o 'nuevos'), en su orden.
+function promoCards(lugar) {
+  const out = [];
+  const used = new Set();
+  for (const p of promos.filter((x) => enLugar(x, lugar))) {
+    if (p.tipo === 'producto') {
+      const it = items.find((x) => x.codigo === p.producto && x.disponible > 0);
+      if (it && !used.has(it)) { used.add(it); out.push(miniCard(it)); }
+    } else if (lugar === 'nuevos' || p.tipo === 'aviso') {
+      const card = promoMiniCard(p);
+      if (card) out.push(card);
+    } else {
+      for (const it of promoItems(p)) {
+        if (used.has(it)) continue;
+        used.add(it);
+        out.push(miniCard(it));
+      }
+    }
+  }
+  return { cards: out, used };
+}
+
+// Fila deslizable con flechas (Destacados, Nuevos).
+function carouselSection(title, cards, subtitle) {
+  const sec = el('section', 'section wrap');
+  const h = el('div', 'section-head');
+  const arrows = el('div', 'arrows');
+  const row = el('ul', 'carousel');
+  for (const [key, dir, label] of [['left', -1, 'Anteriores'], ['right', 1, 'Siguientes']]) {
+    const b = el('button', 'arrow-btn');
+    b.type = 'button';
+    b.setAttribute('aria-label', label);
+    b.append(icon(key));
+    b.addEventListener('click', () => row.scrollBy({ left: dir * row.clientWidth * 0.9, behavior: 'smooth' }));
+    arrows.append(b);
+  }
+  const titles = el('div');
+  titles.append(el('h2', null, title));
+  if (subtitle) titles.append(el('p', 'muted section-sub', subtitle));
+  h.append(titles, arrows);
+  row.append(...cards);
+  sec.append(h, row);
+  return sec;
 }
 
 /* ---------- Detalle ---------- */
@@ -452,12 +537,12 @@ function showcaseItems() {
 function showcaseSlides() {
   const slides = [];
   const used = new Set();
-  for (const p of promos) {
+  for (const p of promos.filter((x) => enLugar(x, 'vitrina'))) {
     if (p.tipo === 'producto') {
       const it = items.find((x) => x.codigo === p.producto && x.disponible > 0);
       if (it && !used.has(it)) { used.add(it); slides.push({ it, promo: p }); }
     } else if (p.tipo === 'marca' || p.tipo === 'categoria') {
-      const list = items.filter((x) => x.disponible > 0 && x.promo === p);
+      const list = promoItems(p);
       if (!list.length) continue;
       const muestra = list.find((x) => safePhoto(x.foto)) || list[0];
       const cats = [...new Set(list.map((x) => x.categoria))];
@@ -471,6 +556,9 @@ function showcaseSlides() {
   }
   return slides;
 }
+
+// Los productos con existencias a los que aplica una promoción de marca o categoría.
+const promoItems = (p) => items.filter((x) => x.disponible > 0 && x.promo === p);
 
 function slidePhoto(box, slide) {
   if (slide.it || slide.muestra) {
@@ -495,7 +583,7 @@ function urgency(n) {
 function productSlide(it, promo) {
   const tags = el('div', 'sc-tags');
   tags.append(
-    promo ? el('span', 'sc-live sc-offer', 'Oferta') : el('span', 'sc-live', 'En vitrina'),
+    it.antes ? el('span', 'sc-live sc-offer', 'Oferta') : el('span', 'sc-live', 'En vitrina'),
     el('span', 'sc-cat', [brandKey(it) && brandName(brandKey(it)), categoryOf(it)].filter(Boolean).join(' · ')),
   );
   const out = [tags, el('h1', 'sc-name', it.nombre)];
@@ -644,9 +732,25 @@ function showcase() {
 
 /* ---------- Inicio ---------- */
 
-function featureText(s) {
-  const cats = countBy(items, (it) => it.categoria);
-  return s.replace('{productos}', number.format(items.length)).replace('{categorias}', number.format(cats.size));
+// «Mundos MN»: cuatro tarjetas grandes (los íconos del logo) con foto, cantidad y enlace a sus productos.
+function mundosSection() {
+  const sec = el('section', 'mundos wrap');
+  sec.setAttribute('aria-label', 'Mundos MN');
+  MUNDOS.forEach((m, i) => {
+    const list = items.filter((it) => it.disponible > 0 && mundoDe(it) === m);
+    if (!list.length) return;
+    const muestra = list.filter((it) => safePhoto(it.foto)).sort((a, b) => b.disponible - a.disponible)[0] || list[0];
+    const a = link(productsHref({ mundo: m.id }), `mundo mundo-${i + 1}`);
+    const txt = el('div', 'mundo-text');
+    const ic = el('span', 'mundo-icon');
+    ic.append(icon(m.icono));
+    txt.append(ic, el('h3', null, m.nombre), el('p', null, m.texto), withIcon(el('span', 'mundo-count', plural(list.length, 'producto', 'productos')), 'arrow', true));
+    const photo = el('div', 'mundo-photo');
+    photoInto(photo, muestra);
+    a.append(txt, photo);
+    sec.append(a);
+  });
+  return sec;
 }
 
 function pageHome() {
@@ -657,17 +761,11 @@ function pageHome() {
   // Portada: la vitrina en vivo.
   frag.append(showcase());
 
-  const features = el('section', 'features wrap');
-  for (const f of STORE.ventajas) {
-    const div = el('div', 'feature');
-    const ic = el('span', 'feature-icon');
-    ic.append(icon(f.icono));
-    const txt = el('div');
-    txt.append(el('strong', null, featureText(f.titulo)), el('span', null, featureText(f.texto)));
-    div.append(ic, txt);
-    features.append(div);
-  }
-  frag.append(features);
+  frag.append(mundosSection());
+
+  // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
+  const nuevos = promoCards('nuevos').cards;
+  if (nuevos.length) frag.append(carouselSection('Nuevo en MN Tech', nuevos, 'Recién llegados, reposiciones y servicios nuevos'));
 
   // Marcas en movimiento (la lista va dos veces para que el desplazamiento no tenga cortes).
   const brands = byCountDesc(countBy(items, brandKey)).slice(0, 24);
@@ -706,28 +804,14 @@ function pageHome() {
   catSec.append(tiles);
   frag.append(catSec);
 
-  // Destacados: con foto primero, luego los de más existencias.
+  // Destacados: primero lo que Yvan marca en MN Tech; después, con foto primero y los de más existencias.
+  const marcados = promoCards('destacados');
   const featured = [...items]
+    .filter((it) => !marcados.used.has(it))
     .sort((a, b) => (safePhoto(b.foto) ? 1 : 0) - (safePhoto(a.foto) ? 1 : 0) || b.disponible - a.disponible)
-    .slice(0, 16);
-  if (featured.length) {
-    const sec = el('section', 'section wrap');
-    const h = el('div', 'section-head');
-    const arrows = el('div', 'arrows');
-    const row = el('ul', 'carousel');
-    for (const [key, dir, label] of [['left', -1, 'Anteriores'], ['right', 1, 'Siguientes']]) {
-      const b = el('button', 'arrow-btn');
-      b.type = 'button';
-      b.setAttribute('aria-label', label);
-      b.append(icon(key));
-      b.addEventListener('click', () => row.scrollBy({ left: dir * row.clientWidth * 0.9, behavior: 'smooth' }));
-      arrows.append(b);
-    }
-    h.append(el('h2', null, 'Destacados'), arrows);
-    row.append(...featured.map(miniCard));
-    sec.append(h, row);
-    frag.append(sec);
-  }
+    .slice(0, Math.max(0, 16 - marcados.cards.length));
+  const destacados = [...marcados.cards, ...featured.map(miniCard)];
+  if (destacados.length) frag.append(carouselSection('Destacados', destacados));
 
   const cta = el('section', 'cta-band wrap');
   const inner = el('div', 'cta-inner');
@@ -806,8 +890,9 @@ function pageProducts(params) {
   const category = params.get('categoria') || '';
   const brand = params.get('marca') || '';
   const term = params.get('q') || '';
+  const mundo = category ? null : MUNDOS.find((m) => m.id === params.get('mundo')) || null;
   // Al cambiar de categoría o marca se reinician los filtros finos y la paginación.
-  const key = `${category}|${brand}|${term}`;
+  const key = `${category}|${brand}|${term}|${mundo?.id || ''}`;
   if (key !== lastProductsKey) {
     specFilters = new Map();
     limit = PAGE;
@@ -823,7 +908,7 @@ function pageProducts(params) {
   const head = el('div', 'shop-head');
   const titles = el('div');
   const count = el('p', 'muted');
-  titles.append(el('h1', null, category || (brand ? brandName(brand) : 'Productos')), count);
+  titles.append(el('h1', null, category || (brand ? brandName(brand) : mundo ? mundo.nombre : 'Productos')), count);
   const tools = el('div', 'shop-tools');
   const filterBtn = withIcon(el('button', 'btn btn-outline filters-toggle', 'Filtros'), 'filter');
   filterBtn.type = 'button';
@@ -851,14 +936,14 @@ function pageProducts(params) {
 
   function draw() {
     const terms = normalize(term).split(/\s+/).filter(Boolean);
-    const searched = items.filter((it) => matchesTerms(it, terms));
+    const searched = items.filter((it) => matchesTerms(it, terms) && (!mundo || mundoDe(it) === mundo));
     const inCategory = category ? searched.filter((it) => categoryOf(it) === category) : searched;
     const inBrand = brand ? inCategory.filter((it) => brandKey(it) === brand) : inCategory;
     const shown = inBrand.filter(matchesSpecs).sort(SORTS[sortBy]);
 
     const sideHead = el('div', 'fhead');
     sideHead.append(withIcon(el('strong', null, 'Filtros'), 'filter'));
-    if (category || brand || [...specFilters.values()].some((v) => v.size)) {
+    if (category || brand || mundo || [...specFilters.values()].some((v) => v.size)) {
       const clear = el('button', 'link-more', 'Limpiar');
       clear.type = 'button';
       clear.addEventListener('click', () => { specFilters = new Map(); go('productos', { q: term }); });
@@ -874,7 +959,7 @@ function pageProducts(params) {
     if (brandCounts.size) {
       const entries = byCountDesc(brandCounts).map((k) => [k, brandName(k), brandCounts.get(k)]);
       groups.push(
-        filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, q: term }), 10),
+        filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, mundo: mundo?.id, q: term }), 10),
       );
     }
     // Filtros por especificación: los campos de la categoría con al menos dos valores distintos.

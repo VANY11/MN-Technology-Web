@@ -24,15 +24,6 @@ export const STORE = {
     sugerencias: ['¿Tienen disponible…?', '¿Qué formas de pago aceptan?', '¿Hacen envíos?', 'Quiero hablar con un asesor'],
   },
 
-  // Franja de la portada. Se pueden agregar, p. ej., envíos o garantía cuando apliquen.
-  // {productos} y {categorias} se reemplazan por los números del catálogo.
-  ventajas: [
-    { icono: 'box', titulo: 'Stock real disponible', texto: 'Inventario sincronizado al minuto' },
-    { icono: 'tag', titulo: 'Precios en 3 monedas', texto: 'Dólares, bolívares y pesos' },
-    { icono: 'grid', titulo: '{productos} productos', texto: 'En {categorias} categorías' },
-    { icono: 'chat', titulo: 'Atención directa', texto: 'Te asesoramos en tu compra' },
-  ],
-
   // Página «Nosotros».
   nosotros: {
     etiqueta: 'MN Technology // Tecnología a tu alcance',

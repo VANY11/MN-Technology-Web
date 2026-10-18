@@ -90,17 +90,20 @@ export function toPublicItem(row) {
 // Promociones que Yvan arma en MN Tech (módulo «Promociones de la web»). Solo se lee la vista
 // web_promociones_vigentes, que ya deja fuera las vencidas, las inactivas y los productos que no se venden;
 // el rol mnstock tiene SELECT sobre la vista, nunca sobre la tabla. De las categorías se mandan los nombres
-// (la de la promoción y sus subcategorías), que es lo que la web conoce de cada producto.
+// (la de la promoción y sus subcategorías), que es lo que la web conoce de cada producto. Con v.* la consulta
+// sigue sirviendo cuando MN Tech suma columnas a la vista (p. ej. `lugares`); solo sale lo que arma toPublicPromo.
 export const PROMOS_SQL = `
-  SELECT v.id, v.tipo, v.titulo, v.texto, v.etiqueta, v.producto_code, v.marca, v.categoria,
-         ARRAY(SELECT c.name FROM mnstore_categories c WHERE c.id = ANY(v.category_ids) ORDER BY c.name) AS categorias,
-         v.descuento_tipo, v.descuento_valor, v.precio_oferta
+  SELECT v.*,
+         ARRAY(SELECT c.name FROM mnstore_categories c WHERE c.id = ANY(v.category_ids) ORDER BY c.name) AS categorias
   FROM web_promociones_vigentes v
   ORDER BY v.orden, v.id
 `;
 
 const TIPOS_PROMO = new Set(['producto', 'marca', 'categoria', 'aviso']);
 const DESCUENTOS = new Set(['ninguno', 'porcentaje', 'precio']);
+// Dónde se muestra la promoción en la web. Sin la columna (vista vieja), donde iba antes: vitrina y destacados.
+const LUGARES = ['vitrina', 'destacados', 'nuevos'];
+const LUGARES_POR_DEFECTO = ['vitrina', 'destacados'];
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
 export function toPublicPromo(row) {
@@ -122,5 +125,6 @@ export function toPublicPromo(row) {
     descuento,
     porcentaje: descuento === 'porcentaje' && valor > 0 && valor < 100 ? valor : null,
     precio_oferta: row.tipo === 'producto' && descuento !== 'ninguno' ? money(row.precio_oferta) : null,
+    lugares: Array.isArray(row.lugares) ? LUGARES.filter((l) => row.lugares.includes(l)) : LUGARES_POR_DEFECTO,
   };
 }
