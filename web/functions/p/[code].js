@@ -1,9 +1,12 @@
 // Función de Cloudflare Pages en /p/<código>: el enlace de un producto para compartir.
 // Devuelve la misma página de la tienda (que abre la ficha de ese producto) con las etiquetas
 // Open Graph del producto (nombre, precio y foto), para que WhatsApp, Facebook, Telegram, etc.
-// muestren la vista previa. Los datos salen de /api/stock (la misma caché de 60 s de la tienda).
+// muestren la vista previa. Los datos salen de /api/stock y /api/promociones (la misma caché de 60 s de la
+// tienda), con el precio de oferta calculado igual que en la tienda (promos.js).
 
 import { onRequestGet as stockGet } from '../api/stock.js';
+import { onRequestGet as promocionesGet } from '../api/promociones.js';
+import { aplicarPromos, etiquetaPromo } from '../../public/promos.js';
 
 const precio = new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'USD' });
 const numero = new Intl.NumberFormat('es-VE');
@@ -15,10 +18,20 @@ const escapar = (s) =>
 export function metaProducto(item, origin) {
   const url = `${origin}/p/${encodeURIComponent(item.codigo)}`;
   const partes = [];
-  if (item.precio !== null && item.precio !== undefined) partes.push(precio.format(item.precio));
+  const etiqueta = etiquetaPromo(item);
+  const antes = item.antes?.precio;
+  if (item.precio !== null && item.precio !== undefined) {
+    // En oferta: el precio de ahora, el de antes y cuánto se ahorra.
+    if (antes > item.precio) {
+      partes.push(`Ahora ${precio.format(item.precio)} (antes ${precio.format(antes)})`);
+      partes.push(`Ahorras ${Math.round((1 - item.precio / antes) * 100)}%`);
+    } else partes.push(precio.format(item.precio));
+  }
   if (item.disponible > 0) partes.push(item.disponible === 1 ? 'Última unidad' : `${numero.format(item.disponible)} disponibles`);
   partes.push('MN Technology');
   const descripcion = partes.join(' · ');
+  // WhatsApp muestra sobre todo el título: ahí va también la oferta.
+  const titulo = etiqueta ? `${etiqueta} · ${item.nombre}` : item.nombre;
   const foto =
     typeof item.foto === 'string' && item.foto.startsWith('https://') ? item.foto
     : typeof item.foto === 'string' && item.foto.startsWith('/api/foto/') ? `${origin}${item.foto}`
@@ -26,7 +39,7 @@ export function metaProducto(item, origin) {
   const tags = [
     ['og:type', 'product'],
     ['og:site_name', 'MN Technology'],
-    ['og:title', item.nombre],
+    ['og:title', titulo],
     ['og:description', descripcion],
     ['og:url', url],
     foto && ['og:image', foto],
@@ -35,7 +48,7 @@ export function metaProducto(item, origin) {
     .map(([k, v]) => `<meta property="${k}" content="${escapar(v)}">`);
   tags.push(`<meta name="twitter:card" content="${foto ? 'summary_large_image' : 'summary'}">`);
   tags.push(`<link rel="canonical" href="${escapar(url)}">`);
-  return { titulo: `${item.nombre} · MN Technology`, descripcion, tags };
+  return { titulo: `${titulo} · MN Technology`, descripcion, tags };
 }
 
 export function conMeta(html, meta) {
@@ -46,14 +59,20 @@ export function conMeta(html, meta) {
     .replace('</head>', () => `  ${meta.tags.join('\n  ')}\n</head>`);
 }
 
-// Usa la misma función de /api/stock (sin pedirse a sí misma por la red).
+// Usa las mismas funciones de /api/stock y /api/promociones (sin pedirse a sí misma por la red).
+async function leer(ctx, ruta, fn) {
+  const request = new Request(new URL(ruta, ctx.request.url), { headers: { Accept: 'application/json' } });
+  const res = await fn({ ...ctx, request });
+  return res.ok ? res.json() : null;
+}
+
 async function buscarProducto(ctx, code) {
   try {
-    const request = new Request(new URL('/api/stock', ctx.request.url), { headers: { Accept: 'application/json' } });
-    const res = await stockGet({ ...ctx, request });
-    if (!res.ok) return null;
-    const lista = await res.json();
-    return Array.isArray(lista) ? lista.find((it) => it && it.codigo === code) || null : null;
+    const [lista, promos] = await Promise.all([leer(ctx, '/api/stock', stockGet), leer(ctx, '/api/promociones', promocionesGet).catch(() => null)]);
+    const item = Array.isArray(lista) ? lista.find((it) => it && it.codigo === code) || null : null;
+    // Sin promociones (o si fallan) la vista previa sale con el precio normal.
+    if (item && Array.isArray(promos)) aplicarPromos([item], promos);
+    return item;
   } catch {
     return null;
   }
