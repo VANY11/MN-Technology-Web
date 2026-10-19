@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { onRequestGet, inicioDeHoyVE } from '../functions/api/monitor.js';
+import { onRequestGet, inicioDeHoyVE, resumirInventario, diaVE } from '../functions/api/monitor.js';
 
 const env = {
   MONITOR_CLAVE: 'clave-monitor',
@@ -83,9 +83,21 @@ test('sin variables del túnel marca sin configurar', async () => {
 test('lee las visitas de Web Analytics con el token de API', async () => {
   respuestas.graphql = (init) => {
     assert.equal(init.headers.Authorization, 'Bearer cf-token');
-    const { variables } = JSON.parse(init.body);
+    const { query, variables } = JSON.parse(init.body);
     assert.equal(variables.cuenta, 'cuenta-1');
     assert.equal(variables.filtroHoy.siteTag, 'sitio-1');
+    if (query.startsWith('query Rendimiento')) {
+      return jsonRes({ data: { viewer: { accounts: [{ carga: [{ count: 9, quantiles: { pageLoadTimeP50: 1234000, pageLoadTimeP90: 3400000, firstContentfulPaintP50: 800000 } }] }] } } });
+    }
+    if (query.startsWith('query Semana')) {
+      const hace = (h) => new Date(Math.floor(Date.now() / 3600e3) * 3600e3 - h * 3600e3).toISOString();
+      return jsonRes({ data: { viewer: { accounts: [{
+        horas: [{ count: 5, sum: { visits: 2 }, dimensions: { datetimeHour: hace(30) } }, { count: 7, sum: { visits: 3 }, dimensions: { datetimeHour: hace(1) } }],
+        ayer: [{ count: 50, sum: { visits: 20 } }],
+        paginas: [{ count: 9, dimensions: { requestPath: '/p/T001' } }],
+        navegadores: [{ count: 9, dimensions: { userAgentBrowser: 'Chrome' } }],
+      }] } } });
+    }
     return jsonRes({ data: { viewer: { accounts: [{
       hoy: [{ count: 120, sum: { visits: 45 } }],
       ahora: [{ count: 4, sum: { visits: 2 } }],
@@ -99,6 +111,37 @@ test('lee las visitas de Web Analytics con el token de API', async () => {
   assert.deepEqual(data.visitas.hoy, { paginas: 120, visitas: 45 });
   assert.deepEqual(data.visitas.ultimos5min, { paginas: 4, visitas: 2 });
   assert.deepEqual(data.visitas.origen, [{ nombre: '(directo)', paginas: 50 }]);
+  assert.deepEqual(data.visitas.ayerALaHora, { paginas: 50, visitas: 20 });
+  assert.equal(data.visitas.porHora.length, 1, 'solo las últimas 24 horas');
+  assert.equal(data.visitas.porDia.length, 7);
+  assert.equal(data.visitas.porDia.reduce((s, d) => s + d.paginas, 0), 12);
+  assert.deepEqual(data.visitas.carga, { muestras: 9, p50: 1234, p90: 3400, primerPintado: 800 });
+  assert.equal(data.visitas.avisos, undefined);
+});
+
+test('si fallan los extras de visitas, lo principal sigue', async () => {
+  respuestas.graphql = (init) => {
+    if (!JSON.parse(init.body).query.startsWith('query Visitas')) return jsonRes({ data: null, errors: [{ message: 'campo desconocido' }] });
+    return jsonRes({ data: { viewer: { accounts: [{ hoy: [{ count: 3, sum: { visits: 1 } }], ahora: [], minutos: [], paises: [], equipos: [], origen: [] }] } } });
+  };
+  const data = await (await run({ ...env, CF_API_TOKEN: 'x', CF_ACCOUNT_ID: 'y' })).json();
+  assert.deepEqual(data.visitas.hoy, { paginas: 3, visitas: 1 });
+  assert.equal(data.visitas.porDia, undefined);
+  assert.deepEqual(data.visitas.avisos, ['campo desconocido', 'campo desconocido']);
+});
+
+test('resume el inventario publicado', () => {
+  const r = resumirInventario([
+    { categoria: 'Teléfonos', disponible: 2, precio: 100 },
+    { categoria: 'Teléfonos', disponible: 5, precio: 10 },
+    { categoria: null, disponible: 1, precio: 3.5 },
+  ]);
+  assert.equal(r.productos, 3);
+  assert.equal(r.unidades, 8);
+  assert.equal(r.valorUsd, 254);
+  assert.equal(r.pocasUnidades, 2);
+  assert.deepEqual(r.porCategoria[0], { nombre: 'Teléfonos', unidades: 7 });
+  assert.equal(diaVE('2026-10-19T03:00:00Z'), '2026-10-18');
 });
 
 test('muestra el error de Cloudflare si el token no sirve', async () => {

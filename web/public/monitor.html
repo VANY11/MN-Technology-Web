@@ -7,23 +7,27 @@
   <title>Monitor · MN Technology</title>
   <meta name="theme-color" content="#7c3aed">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="/monitor.css">
   <script type="module" src="/monitor.js"></script>
 </head>
 <body>
   <header class="m-top">
-    <div class="m-brand">
-      <span class="m-mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M8 50V14h8l16 21 16-21h8v36h-9V30L32 48 17 30v20z" fill="#fff"/></svg></span>
-      <div>
-        <h1>Monitor de la web</h1>
-        <p class="m-sub" id="resumen">Conectando…</p>
+    <div class="m-top-inner">
+      <div class="m-brand">
+        <span class="m-mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M8 50V14h8l16 21 16-21h8v36h-9V30L32 48 17 30v20z" fill="#fff"/></svg></span>
+        <div>
+          <h1>Monitor de la web</h1>
+          <p class="m-sub"><span class="m-estado-punto" id="estado-punto" aria-hidden="true"></span><span id="resumen">Conectando…</span></p>
+        </div>
       </div>
-    </div>
-    <div class="m-acciones">
-      <span class="m-pulso" id="pulso" aria-hidden="true"></span>
-      <span class="m-hora" id="hora">—</span>
-      <button type="button" id="pausa">Pausar</button>
-      <button type="button" id="salir" class="m-sec">Salir</button>
+      <div class="m-acciones">
+        <span class="m-hora" id="hora">—</span>
+        <button type="button" id="pausa">Pausar</button>
+        <button type="button" id="salir" class="m-sec">Salir</button>
+      </div>
     </div>
   </header>
 
@@ -36,20 +40,39 @@
   </form>
 
   <main id="panel" hidden>
-    <section aria-labelledby="t-servicios">
-      <h2 id="t-servicios">Servicios</h2>
-      <div class="m-grid" id="servicios"></div>
+    <section class="m-kpis" id="kpis" aria-label="Resumen"></section>
+
+    <div class="m-fila m-fila-principal">
+      <section class="m-card m-trafico" aria-labelledby="t-trafico">
+        <div class="m-card-head">
+          <h2 id="t-trafico">Tráfico</h2>
+          <div class="m-tabs" role="tablist" aria-label="Periodo">
+            <button type="button" role="tab" data-rango="hora" aria-selected="true">Última hora</button>
+            <button type="button" role="tab" data-rango="dia" aria-selected="false">24 horas</button>
+            <button type="button" role="tab" data-rango="semana" aria-selected="false">7 días</button>
+          </div>
+        </div>
+        <div id="trafico"></div>
+      </section>
+
+      <section class="m-card m-servicios" aria-labelledby="t-servicios">
+        <div class="m-card-head"><h2 id="t-servicios">Servicios</h2><span class="m-nota" id="uptime"></span></div>
+        <ul class="m-svc" id="servicios"></ul>
+      </section>
+    </div>
+
+    <div class="m-fila m-fila-3" id="audiencia"></div>
+
+    <section class="m-card" aria-labelledby="t-inventario">
+      <div class="m-card-head"><h2 id="t-inventario">Inventario publicado</h2><span class="m-nota">Lo que la web muestra ahora</span></div>
+      <div id="inventario"></div>
     </section>
 
-    <section aria-labelledby="t-visitas">
-      <h2 id="t-visitas">Visitas</h2>
-      <div id="visitas"></div>
-    </section>
-
-    <section aria-labelledby="t-eventos">
-      <h2 id="t-eventos">Cambios de estado</h2>
+    <section class="m-card" aria-labelledby="t-eventos">
+      <div class="m-card-head"><h2 id="t-eventos">Cambios de estado</h2></div>
       <ol class="m-eventos" id="eventos"><li class="m-vacio">Sin cambios desde que abriste el panel.</li></ol>
     </section>
   </main>
+  <div class="m-tooltip" id="tooltip" role="status" hidden></div>
 </body>
 </html>

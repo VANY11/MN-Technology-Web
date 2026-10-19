@@ -69,11 +69,34 @@ async function revisarServidor(env) {
   return { estado: 'caido', ms: r.ms, detalle: fallo(r) };
 }
 
+// Lo que el panel muestra del inventario publicado: totales, valor a precio de venta y lo que se está agotando.
+export function resumirInventario(items) {
+  const categorias = new Map();
+  let unidades = 0, valor = 0, pocas = 0;
+  for (const p of items) {
+    const n = Number(p?.disponible) || 0;
+    unidades += n;
+    valor += n * (Number(p?.precio) || 0);
+    if (n > 0 && n <= 2) pocas++;
+    const cat = p?.categoria || 'Sin categoría';
+    categorias.set(cat, (categorias.get(cat) || 0) + n);
+  }
+  const top = [...categorias].sort((a, b) => b[1] - a[1]);
+  return {
+    productos: items.length,
+    unidades,
+    valorUsd: Math.round(valor),
+    pocasUnidades: pocas,
+    categorias: top.length,
+    porCategoria: top.slice(0, 6).map(([nombre, u]) => ({ nombre, unidades: u })),
+  };
+}
+
 async function revisarStock(env) {
   const r = await medir(env.STOCK_API_URL, env);
   if (r.res?.ok && Array.isArray(r.data)) {
-    const unidades = r.data.reduce((s, p) => s + (Number(p?.disponible) || 0), 0);
-    return { estado: porTiempo(r.ms), ms: r.ms, detalle: `${r.data.length} productos, ${unidades} unidades`, productos: r.data.length };
+    const inventario = resumirInventario(r.data);
+    return { estado: porTiempo(r.ms), ms: r.ms, detalle: `${inventario.productos} productos, ${inventario.unidades} unidades`, inventario };
   }
   return { estado: 'caido', ms: r.ms, detalle: r.res?.ok ? 'La respuesta no es una lista' : fallo(r) };
 }
@@ -99,14 +122,34 @@ async function revisarPedidos(env) {
   return { estado: porTiempo(r.ms), ms: r.ms, detalle: 'App MN Tech recibe pedidos' };
 }
 
-const VISITAS_QUERY = `query Visitas($cuenta: string!, $filtroHoy: AccountRumPageloadEventsAdaptiveGroupsFilter_InputObject, $filtroHora: AccountRumPageloadEventsAdaptiveGroupsFilter_InputObject, $filtro5: AccountRumPageloadEventsAdaptiveGroupsFilter_InputObject) {
+const filtroTipo = (evento) => `Account${evento}EventsAdaptiveGroupsFilter_InputObject`;
+const PAGELOAD = filtroTipo('RumPageload');
+
+// Lo principal: si esta consulta falla, el panel muestra el error de Cloudflare.
+const VISITAS_QUERY = `query Visitas($cuenta: string!, $filtroHoy: ${PAGELOAD}, $filtroHora: ${PAGELOAD}, $filtro5: ${PAGELOAD}) {
   viewer { accounts(filter: { accountTag: $cuenta }) {
     hoy: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 1) { count sum { visits } }
     ahora: rumPageloadEventsAdaptiveGroups(filter: $filtro5, limit: 1) { count sum { visits } }
-    minutos: rumPageloadEventsAdaptiveGroups(filter: $filtroHora, limit: 60, orderBy: [datetimeMinute_ASC]) { count dimensions { datetimeMinute } }
-    paises: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 5, orderBy: [count_DESC]) { count dimensions { countryName } }
+    minutos: rumPageloadEventsAdaptiveGroups(filter: $filtroHora, limit: 60, orderBy: [datetimeMinute_ASC]) { count sum { visits } dimensions { datetimeMinute } }
+    paises: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 6, orderBy: [count_DESC]) { count dimensions { countryName } }
     equipos: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 3, orderBy: [count_DESC]) { count dimensions { deviceType } }
-    origen: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 5, orderBy: [count_DESC]) { count dimensions { refererHost } }
+    origen: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 6, orderBy: [count_DESC]) { count dimensions { refererHost } }
+  } }
+}`;
+
+// Extras: si alguna falla, el resto del panel sigue igual y esa tarjeta queda vacía.
+const SEMANA_QUERY = `query Semana($cuenta: string!, $filtroSemana: ${PAGELOAD}, $filtroAyer: ${PAGELOAD}, $filtroHoy: ${PAGELOAD}) {
+  viewer { accounts(filter: { accountTag: $cuenta }) {
+    horas: rumPageloadEventsAdaptiveGroups(filter: $filtroSemana, limit: 200, orderBy: [datetimeHour_ASC]) { count sum { visits } dimensions { datetimeHour } }
+    ayer: rumPageloadEventsAdaptiveGroups(filter: $filtroAyer, limit: 1) { count sum { visits } }
+    paginas: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 6, orderBy: [count_DESC]) { count dimensions { requestPath } }
+    navegadores: rumPageloadEventsAdaptiveGroups(filter: $filtroHoy, limit: 5, orderBy: [count_DESC]) { count dimensions { userAgentBrowser } }
+  } }
+}`;
+
+const RENDIMIENTO_QUERY = `query Rendimiento($cuenta: string!, $filtroHoy: ${filtroTipo('RumPerformance')}) {
+  viewer { accounts(filter: { accountTag: $cuenta }) {
+    carga: rumPerformanceEventsAdaptiveGroups(filter: $filtroHoy, limit: 1) { count quantiles { pageLoadTimeP50 pageLoadTimeP90 firstContentfulPaintP50 } }
   } }
 }`;
 
@@ -116,43 +159,83 @@ export function inicioDeHoyVE(ahora = Date.now()) {
   return new Date(local.getTime() - OFFSET_VE_MS);
 }
 
-async function consultarVisitas(env) {
-  const ahora = Date.now();
-  const filtro = (desde) => ({
-    datetime_geq: new Date(desde).toISOString(),
-    ...(env.CF_WEB_ANALYTICS_SITE ? { siteTag: env.CF_WEB_ANALYTICS_SITE } : {}),
-  });
+// Día de Venezuela (AAAA-MM-DD) de un instante.
+export const diaVE = (t) => new Date(new Date(t).getTime() + OFFSET_VE_MS).toISOString().slice(0, 10);
+
+async function graphql(env, query, variables) {
   const res = await fetch(GRAPHQL_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: VISITAS_QUERY,
-      variables: {
-        cuenta: env.CF_ACCOUNT_ID,
-        filtroHoy: filtro(inicioDeHoyVE(ahora)),
-        filtroHora: filtro(ahora - 3600 * 1000),
-        filtro5: filtro(ahora - 5 * 60 * 1000),
-      },
-    }),
+    body: JSON.stringify({ query, variables: { cuenta: env.CF_ACCOUNT_ID, ...variables } }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const data = await res.json().catch(() => null);
   const cuenta = data?.data?.viewer?.accounts?.[0];
-  if (!res.ok || !cuenta) {
-    const motivo = data?.errors?.[0]?.message || `Cloudflare respondió ${res.status}`;
-    return { configurado: true, error: motivo };
-  }
+  if (!res.ok || !cuenta) throw new Error(data?.errors?.[0]?.message || `Cloudflare respondió ${res.status}`);
+  return cuenta;
+}
+
+// Cloudflare da los tiempos de carga en microsegundos; se pasan a milisegundos.
+const aMs = (v) => (Number.isFinite(v) && v > 0 ? Math.round(v > 60000 ? v / 1000 : v) : null);
+
+async function consultarVisitas(env) {
+  const ahora = Date.now();
+  const hoy = inicioDeHoyVE(ahora).getTime();
+  const filtro = (desde, hasta) => ({
+    datetime_geq: new Date(desde).toISOString(),
+    ...(hasta ? { datetime_lt: new Date(hasta).toISOString() } : {}),
+    ...(env.CF_WEB_ANALYTICS_SITE ? { siteTag: env.CF_WEB_ANALYTICS_SITE } : {}),
+  });
+  const [base, semana, rendimiento] = await Promise.allSettled([
+    graphql(env, VISITAS_QUERY, { filtroHoy: filtro(hoy), filtroHora: filtro(ahora - 3600e3), filtro5: filtro(ahora - 5 * 60e3) }),
+    // Siete días completos hacia atrás desde el inicio de hoy; «ayer» corta a la misma hora de hoy para comparar parejo.
+    graphql(env, SEMANA_QUERY, { filtroSemana: filtro(hoy - 6 * 86400e3), filtroAyer: filtro(hoy - 86400e3, ahora - 86400e3), filtroHoy: filtro(hoy) }),
+    graphql(env, RENDIMIENTO_QUERY, { filtroHoy: filtro(hoy) }),
+  ]);
+  if (base.status === 'rejected') return { configurado: true, error: base.reason?.message || 'No se pudo consultar Cloudflare' };
+
+  const c = base.value;
   const total = (g) => ({ paginas: g?.[0]?.count ?? 0, visitas: g?.[0]?.sum?.visits ?? 0 });
-  const top = (g, campo) => (g || []).map((x) => ({ nombre: x.dimensions?.[campo] || '(directo)', paginas: x.count }));
-  return {
+  const top = (g, campo, vacio = '(directo)') => (g || []).map((x) => ({ nombre: x.dimensions?.[campo] || vacio, paginas: x.count }));
+  const datos = {
     configurado: true,
-    hoy: total(cuenta.hoy),
-    ultimos5min: total(cuenta.ahora),
-    porMinuto: (cuenta.minutos || []).map((x) => ({ minuto: x.dimensions?.datetimeMinute, paginas: x.count })),
-    paises: top(cuenta.paises, 'countryName'),
-    equipos: top(cuenta.equipos, 'deviceType'),
-    origen: top(cuenta.origen, 'refererHost'),
+    hoy: total(c.hoy),
+    ultimos5min: total(c.ahora),
+    porMinuto: (c.minutos || []).map((x) => ({ t: x.dimensions?.datetimeMinute, paginas: x.count, visitas: x.sum?.visits ?? 0 })),
+    paises: top(c.paises, 'countryName', '??'),
+    equipos: top(c.equipos, 'deviceType', 'otro'),
+    origen: top(c.origen, 'refererHost'),
   };
+
+  if (semana.status === 'fulfilled') {
+    const s = semana.value;
+    const horas = (s.horas || []).map((x) => ({ t: x.dimensions?.datetimeHour, paginas: x.count, visitas: x.sum?.visits ?? 0 }));
+    datos.porHora = horas.filter((h) => new Date(h.t).getTime() >= ahora - 24 * 3600e3);
+    const dias = new Map();
+    for (let i = 6; i >= 0; i--) dias.set(diaVE(hoy - i * 86400e3 + 3600e3), { t: diaVE(hoy - i * 86400e3 + 3600e3), paginas: 0, visitas: 0 });
+    for (const h of horas) {
+      const d = dias.get(diaVE(h.t));
+      if (d) { d.paginas += h.paginas; d.visitas += h.visitas; }
+    }
+    datos.porDia = [...dias.values()];
+    datos.ayerALaHora = total(s.ayer);
+    datos.paginasTop = top(s.paginas, 'requestPath', '/');
+    datos.navegadores = top(s.navegadores, 'userAgentBrowser', 'otro');
+  }
+  if (rendimiento.status === 'fulfilled') {
+    const q = rendimiento.value.carga?.[0];
+    if (q?.count) {
+      datos.carga = {
+        muestras: q.count,
+        p50: aMs(q.quantiles?.pageLoadTimeP50),
+        p90: aMs(q.quantiles?.pageLoadTimeP90),
+        primerPintado: aMs(q.quantiles?.firstContentfulPaintP50),
+      };
+    }
+  }
+  const avisos = [semana, rendimiento].filter((r) => r.status === 'rejected').map((r) => r.reason?.message);
+  if (avisos.length) datos.avisos = avisos;
+  return datos;
 }
 
 async function visitas(env, request, waitUntil) {
