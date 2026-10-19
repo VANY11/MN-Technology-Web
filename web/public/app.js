@@ -574,7 +574,8 @@ function showcaseItems() {
 function showcaseSlides() {
   const slides = [];
   const used = new Set();
-  for (const p of promos.filter((x) => enLugar(x, 'vitrina'))) {
+  // «Destacados» ya no tiene sección propia (Yvan, 2026-10-19: ya están arriba): lo marcado así sale en la vitrina.
+  for (const p of promos.filter((x) => enLugar(x, 'vitrina') || enLugar(x, 'destacados'))) {
     if (p.tipo === 'producto') {
       const it = items.find((x) => x.codigo === p.producto && x.disponible > 0);
       if (it && !used.has(it)) { used.add(it); slides.push({ it, promo: p }); }
@@ -852,7 +853,7 @@ function pageHome() {
   frag.append(searchHero());
 
   // Categorías justo debajo del buscador, en el orden de MN Tech.
-  const catSec = el('section', 'section wrap');
+  const catSec = el('section', 'section wrap home-cats');
   const head = el('div', 'section-head');
   head.append(el('h2', null, 'Explora por categoría'), link('#/productos', 'link-more', 'Ver todo el catálogo'));
   catSec.append(head);
@@ -874,27 +875,6 @@ function pageHome() {
   if (nuevos.length) frag.append(carouselSection('Nuevo en MN Tech', nuevos, 'Recién llegados, reposiciones y servicios nuevos'));
 
 
-  // Destacados: primero lo que Yvan marca en MN Tech; después, con foto primero y los de más existencias.
-  const marcados = promoCards('destacados');
-  const featured = [...items]
-    .filter((it) => !marcados.used.has(it))
-    .sort((a, b) => (safePhoto(b.foto) ? 1 : 0) - (safePhoto(a.foto) ? 1 : 0) || b.disponible - a.disponible)
-    .slice(0, Math.max(0, 16 - marcados.cards.length));
-  const destacados = [...marcados.cards, ...featured.map(miniCard)];
-  if (destacados.length) frag.append(carouselSection('Destacados', destacados));
-
-  const cta = el('section', 'cta-band wrap');
-  const inner = el('div', 'cta-inner');
-  const txt = el('div');
-  txt.append(
-    el('h2', null, '¿Compras para tu negocio o varios equipos?'),
-    el('p', null, 'Arma tu pedido en el carrito y envíanoslo para cotizar.'),
-  );
-  const btns = el('div', 'cta-btns');
-  btns.append(withIcon(link('#/productos', 'btn btn-light', 'Ver productos'), 'arrow', true), link('#/contacto', 'btn btn-ghost-light', 'Contáctanos'));
-  inner.append(txt, btns);
-  cta.append(inner);
-  frag.append(cta);
   return frag;
 }
 
