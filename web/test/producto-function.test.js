@@ -56,3 +56,30 @@ test('si el stock no responde, igual se ve la tienda', async () => {
   const res = await onRequestGet(ctx);
   assert.equal(await res.text(), HTML);
 });
+
+test('con una promoción, la vista previa muestra la oferta, el precio de antes y el descuento', async () => {
+  const ctx = contexto('MN-0730');
+  const promos = [{ id: 1, tipo: 'producto', producto: 'MN-0730', descuento: 'porcentaje', porcentaje: 20, etiqueta: null }];
+  globalThis.fetch = async (url) =>
+    new Response(JSON.stringify(String(url).includes('/promociones') ? promos : items), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  const html = await (await onRequestGet(ctx)).text();
+  assert.match(html, /<meta property="og:title" content="-20% · SAMSUNG A16 4\+128">/);
+  assert.match(html, /<meta property="og:description" content="Ahora USD[^"]*148,00 \(antes USD[^"]*185,00\) · Ahorras 20% · 2 disponibles · MN Technology">/);
+  assert.match(html, /<title>-20% · SAMSUNG A16 4\+128 · MN Technology<\/title>/);
+});
+
+test('con precio de oferta y etiqueta propia, la etiqueta va en el título', async () => {
+  const ctx = contexto('MN-0730');
+  const promos = [{ id: 2, tipo: 'producto', producto: 'MN-0730', precio_oferta: 170, etiqueta: 'Black Friday' }];
+  globalThis.fetch = async (url) =>
+    new Response(JSON.stringify(String(url).includes('/promociones') ? promos : items), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  const html = await (await onRequestGet(ctx)).text();
+  assert.match(html, /og:title" content="Black Friday · SAMSUNG A16 4\+128"/);
+  assert.match(html, /og:description" content="Ahora USD[^"]*170,00 \(antes USD[^"]*185,00\) · Ahorras 8% · /);
+});
