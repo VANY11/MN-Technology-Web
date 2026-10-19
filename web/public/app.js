@@ -20,7 +20,16 @@ const CONTACT = STORE.contacto;
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
-const q = $('q');
+// Buscador del catálogo: va en la cabecera de Productos (pageProducts); en el inicio está el buscador grande. La
+// cabecera de la página ya no lleva buscador (Yvan, 2026-10-19).
+const searchForm = document.createElement('form');
+searchForm.className = 'search shop-search';
+searchForm.id = 'search-form';
+searchForm.setAttribute('role', 'search');
+searchForm.innerHTML = '<label class="sr-only" for="q">Buscar productos</label>'
+  + '<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'
+  + '<input id="q" type="search" placeholder="Busca en el catálogo: producto, marca o modelo…" autocomplete="off">';
+const q = searchForm.querySelector('input');
 const currency = $('currency');
 const detail = $('detail');
 
@@ -973,7 +982,7 @@ function pageProducts(params) {
   sort.value = sortBy;
   sort.addEventListener('change', () => { sortBy = sort.value; limit = PAGE; draw(); });
   tools.append(filterBtn, sort);
-  head.append(titles, tools);
+  head.append(titles, searchForm, tools);
 
   const grid = el('ul', 'grid');
   const status = el('p', 'status');
@@ -1817,8 +1826,8 @@ $('menu-btn').addEventListener('click', () => {
   $('menu-btn').setAttribute('aria-expanded', String(open));
 });
 
-// Buscar desde la cabecera lleva al catálogo; estando en el catálogo filtra mientras se escribe.
-$('search-form').addEventListener('submit', (e) => {
+// Buscar en el catálogo filtra mientras se escribe; Enter quita el foco (en el teléfono cierra el teclado).
+searchForm.addEventListener('submit', (e) => {
   e.preventDefault();
   q.blur();
   go('productos', { q: q.value.trim() });
@@ -1827,7 +1836,11 @@ q.addEventListener('input', () => {
   const { page, params } = parseRoute();
   if (page !== 'productos') return;
   history.replaceState(null, '', hashFor('productos', { categoria: params.get('categoria'), marca: params.get('marca'), q: q.value.trim() }));
+  // El buscador va dentro de la página que se vuelve a dibujar: se le devuelve el foco y el cursor.
+  const [a, b] = [q.selectionStart, q.selectionEnd];
   render();
+  q.focus({ preventScroll: true });
+  try { q.setSelectionRange(a, b); } catch {}
 });
 
 currency.addEventListener('change', () => {
