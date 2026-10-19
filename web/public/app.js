@@ -2,6 +2,7 @@ import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
 import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
 import { aplicarPromos, etiquetaPromo, enLugar } from './promos.js';
+import { indice, puntaje } from './buscar.js';
 import { iniciarEfectos, volarAlCarrito, celebrarEnFicha } from './efectos.js';
 
 const LOW_STOCK = 3;
@@ -19,12 +20,23 @@ const CONTACT = STORE.contacto;
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
-const q = $('q');
+// Buscador del catálogo: va en la cabecera de Productos (pageProducts); en el inicio está el buscador grande. La
+// cabecera de la página ya no lleva buscador (Yvan, 2026-10-19).
+const searchForm = document.createElement('form');
+searchForm.className = 'search shop-search';
+searchForm.id = 'search-form';
+searchForm.setAttribute('role', 'search');
+searchForm.innerHTML = '<label class="sr-only" for="q">Buscar productos</label>'
+  + '<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'
+  + '<input id="q" type="search" placeholder="Busca en el catálogo: producto, marca o modelo…" autocomplete="off">';
+const q = searchForm.querySelector('input');
 const currency = $('currency');
 const detail = $('detail');
 
 let items = [];
 let promos = [];
+// Orden de las categorías que Yvan arma en MN Tech: nombre → { orden (fijada) | null, vendidas en 30 días }.
+let ordenCats = new Map();
 let loadError = false;
 let pedidosOnline = false; // la web guarda el pedido en el sistema MN Tech (GET /api/pedido)
 // Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
@@ -140,8 +152,17 @@ function countBy(list, keyFn) {
 
 const byCountDesc = (counts) =>
   [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a) || String(a).localeCompare(String(b), 'es'));
-const alphabetical = (names) =>
-  [...names].sort((a, b) => (a === OTHERS ? 1 : b === OTHERS ? -1 : a.localeCompare(b, 'es', { sensitivity: 'base' })));
+// Categorías en el orden de MN Tech: primero las fijadas por su número, después las que más se venden y, a igual
+// venta (o sin datos del servidor), las que tienen más productos. «Otros» siempre al final.
+const categoriasEnOrden = (counts) => {
+  const info = (c) => ordenCats.get(c) || { orden: null, vendidas: 0 };
+  return [...counts.keys()].sort((a, b) => {
+    if (a === OTHERS || b === OTHERS) return a === OTHERS ? 1 : -1;
+    const x = info(a), y = info(b);
+    if ((x.orden === null) !== (y.orden === null)) return x.orden === null ? 1 : -1;
+    return (x.orden ?? 0) - (y.orden ?? 0) || y.vendidas - x.vendidas || counts.get(b) - counts.get(a) || String(a).localeCompare(String(b), 'es');
+  });
+};
 
 function stockBadge(n) {
   if (n <= LOW_STOCK) return [n === 1 ? 'Última unidad' : `Últimas ${n}`, 'low'];
@@ -562,7 +583,8 @@ function showcaseItems() {
 function showcaseSlides() {
   const slides = [];
   const used = new Set();
-  for (const p of promos.filter((x) => enLugar(x, 'vitrina'))) {
+  // «Destacados» ya no tiene sección propia (Yvan, 2026-10-19: ya están arriba): lo marcado así sale en la vitrina.
+  for (const p of promos.filter((x) => enLugar(x, 'vitrina') || enLugar(x, 'destacados'))) {
     if (p.tipo === 'producto') {
       const it = items.find((x) => x.codigo === p.producto && x.disponible > 0);
       if (it && !used.has(it)) { used.add(it); slides.push({ it, promo: p }); }
@@ -757,62 +779,90 @@ function showcase() {
 
 /* ---------- Inicio ---------- */
 
-// «Mundos MN»: cuatro tarjetas grandes (los íconos del logo) con foto, cantidad y enlace a sus productos.
-function mundosSection() {
-  const sec = el('section', 'mundos wrap');
-  sec.setAttribute('aria-label', 'Mundos MN');
-  MUNDOS.forEach((m, i) => {
-    const list = items.filter((it) => it.disponible > 0 && mundoDe(it) === m);
-    if (!list.length) return;
-    const muestra = list.filter((it) => safePhoto(it.foto)).sort((a, b) => b.disponible - a.disponible)[0] || list[0];
-    const a = link(productsHref({ mundo: m.id }), `mundo mundo-${i + 1}`);
-    const txt = el('div', 'mundo-text');
-    const ic = el('span', 'mundo-icon');
-    ic.append(icon(m.icono));
-    txt.append(ic, el('h3', null, m.nombre), el('p', null, m.texto), withIcon(el('span', 'mundo-count', plural(list.length, 'producto', 'productos')), 'arrow', true));
-    const photo = el('div', 'mundo-photo');
-    photoInto(photo, muestra);
-    a.append(txt, photo);
-    sec.append(a);
+// Buscador grande del inicio: busca mientras se escribe (con errores de ortografía incluidos), muestra las
+// primeras coincidencias con foto y precio, sugiere categorías y lleva al catálogo completo.
+function searchHero() {
+  const sec = el('section', 'hero-search wrap');
+  sec.setAttribute('aria-label', 'Buscar productos');
+  const box = el('div', 'hs-box');
+  box.append(el('h2', 'hs-title', '¿Qué estás buscando?'), el('p', 'hs-sub', 'Escribe el producto, la marca o el modelo. Te entendemos aunque lo escribas con errores.'));
+
+  const form = el('form', 'hs-form');
+  form.setAttribute('role', 'search');
+  const field = el('div', 'hs-field');
+  field.append(icon('search', 'hs-icon'));
+  const input = el('input', 'hs-input');
+  input.type = 'search';
+  input.placeholder = 'Ej: audífonos bluetooth, forro A16, cargador tipo C…';
+  input.autocomplete = 'off';
+  input.setAttribute('aria-label', 'Buscar productos');
+  input.setAttribute('aria-controls', 'hs-results');
+  const go1 = withIcon(el('button', 'btn hs-go', 'Buscar'), 'arrow', true);
+  go1.type = 'submit';
+  field.append(input, go1);
+  form.append(field);
+
+  const results = el('ul', 'hs-results');
+  results.id = 'hs-results';
+  results.hidden = true;
+  // Las categorías van justo debajo del buscador (pageHome): aquí solo el atajo al catálogo completo.
+  const all = withIcon(link('#/productos', 'link-more hs-all', `Ver todo el catálogo (${number.format(items.length)} productos)`), 'arrow', true);
+
+  const buscarAhora = () => {
+    const t = input.value.trim();
+    if (t.length < 2) { results.hidden = true; return; }
+    const top = items
+      .map((it) => [it, relevancia(it, t)])
+      .filter(([, p]) => p > 0)
+      .sort((a, b) => b[1] - a[1] || b[0].disponible - a[0].disponible)
+      .slice(0, 6);
+    const lis = top.map(([it]) => {
+      const li = el('li');
+      const b = el('button', 'hs-item');
+      b.type = 'button';
+      const ph = el('span', 'hs-photo');
+      photoInto(ph, it);
+      const info = el('span', 'hs-info');
+      info.append(el('span', 'hs-name', it.nombre), el('span', 'hs-cat', categoryOf(it)));
+      b.append(ph, info, el('span', 'hs-price', priceText(it) || 'Consultar'));
+      b.addEventListener('click', () => showDetail(it));
+      li.append(b);
+      return li;
+    });
+    const total = items.filter((it) => relevancia(it, t) > 0).length;
+    const ver = el('li', 'hs-more');
+    ver.append(total
+      ? withIcon(link(productsHref({ q: t }), 'link-more', `Ver los ${number.format(total)} resultados`), 'arrow', true)
+      : el('span', 'muted', `No encontramos «${t}». Prueba con otra palabra o mira el catálogo completo.`));
+    results.replaceChildren(...lis, ver);
+    results.hidden = false;
+  };
+  let espera = 0;
+  input.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(buscarAhora, 120); });
+  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) buscarAhora(); });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    go('productos', { q: input.value.trim() });
   });
+  document.addEventListener('click', (e) => { if (!sec.contains(e.target)) results.hidden = true; });
+
+  box.append(form, results, all);
+  sec.append(box);
   return sec;
 }
 
 function pageHome() {
   const frag = document.createDocumentFragment();
   const catCounts = countBy(items, (it) => it.categoria);
-  const topCats = byCountDesc(catCounts);
+  const topCats = categoriasEnOrden(catCounts);
 
   // Portada: la vitrina en vivo.
   frag.append(showcase());
 
-  frag.append(mundosSection());
+  frag.append(searchHero());
 
-  // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
-  const nuevos = promoCards('nuevos').cards;
-  if (nuevos.length) frag.append(carouselSection('Nuevo en MN Tech', nuevos, 'Recién llegados, reposiciones y servicios nuevos'));
-
-  // Marcas en movimiento (la lista va dos veces para que el desplazamiento no tenga cortes).
-  const brands = byCountDesc(countBy(items, brandKey)).slice(0, 24);
-  if (brands.length) {
-    const strip = el('section', 'brands');
-    strip.setAttribute('aria-label', 'Marcas');
-    const track = el('div', 'brands-track');
-    for (const copy of [0, 1]) {
-      for (const k of brands) {
-        const a = link(productsHref({ marca: k }), 'brand-pill', brandName(k));
-        if (copy) {
-          a.setAttribute('aria-hidden', 'true');
-          a.tabIndex = -1;
-        }
-        track.append(a);
-      }
-    }
-    strip.append(track);
-    frag.append(strip);
-  }
-
-  const catSec = el('section', 'section wrap');
+  // Categorías justo debajo del buscador, en el orden de MN Tech.
+  const catSec = el('section', 'section wrap home-cats');
   const head = el('div', 'section-head');
   head.append(el('h2', null, 'Explora por categoría'), link('#/productos', 'link-more', 'Ver todo el catálogo'));
   catSec.append(head);
@@ -829,39 +879,23 @@ function pageHome() {
   catSec.append(tiles);
   frag.append(catSec);
 
-  // Destacados: primero lo que Yvan marca en MN Tech; después, con foto primero y los de más existencias.
-  const marcados = promoCards('destacados');
-  const featured = [...items]
-    .filter((it) => !marcados.used.has(it))
-    .sort((a, b) => (safePhoto(b.foto) ? 1 : 0) - (safePhoto(a.foto) ? 1 : 0) || b.disponible - a.disponible)
-    .slice(0, Math.max(0, 16 - marcados.cards.length));
-  const destacados = [...marcados.cards, ...featured.map(miniCard)];
-  if (destacados.length) frag.append(carouselSection('Destacados', destacados));
+  // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
+  const nuevos = promoCards('nuevos').cards;
+  if (nuevos.length) frag.append(carouselSection('Nuevo en MN Tech', nuevos, 'Recién llegados, reposiciones y servicios nuevos'));
 
-  const cta = el('section', 'cta-band wrap');
-  const inner = el('div', 'cta-inner');
-  const txt = el('div');
-  txt.append(
-    el('h2', null, '¿Compras para tu negocio o varios equipos?'),
-    el('p', null, 'Arma tu pedido en el carrito y envíanoslo para cotizar.'),
-  );
-  const btns = el('div', 'cta-btns');
-  btns.append(withIcon(link('#/productos', 'btn btn-light', 'Ver productos'), 'arrow', true), link('#/contacto', 'btn btn-ghost-light', 'Contáctanos'));
-  inner.append(txt, btns);
-  cta.append(inner);
-  frag.append(cta);
+
   return frag;
 }
 
 /* ---------- Productos ---------- */
 
-const matchesTerms = (it, terms) => {
-  if (!terms.length) return true;
-  const text = normalize(
-    [it.nombre, it.marca, it.modelo, it.codigo, it.categoria, ...specList(it).map((x) => x.valor)].filter(Boolean).join(' '),
-  );
-  return terms.every((t) => text.includes(t));
+// Búsqueda tolerante a errores (buscar.js): el índice de cada producto se arma una vez.
+const indices = new WeakMap();
+const indiceDe = (it) => {
+  if (!indices.has(it)) indices.set(it, indice([it.nombre, it.marca, it.modelo, it.codigo, it.categoria, ...specList(it).map((x) => x.valor)]));
+  return indices.get(it);
 };
+const relevancia = (it, term) => puntaje(indiceDe(it), term);
 
 const matchesSpecs = (item) => {
   for (const [campo, valores] of specFilters) {
@@ -948,7 +982,7 @@ function pageProducts(params) {
   sort.value = sortBy;
   sort.addEventListener('change', () => { sortBy = sort.value; limit = PAGE; draw(); });
   tools.append(filterBtn, sort);
-  head.append(titles, tools);
+  head.append(titles, searchForm, tools);
 
   const grid = el('ul', 'grid');
   const status = el('p', 'status');
@@ -960,11 +994,19 @@ function pageProducts(params) {
   main.append(head, status, grid, moreWrap);
 
   function draw() {
-    const terms = normalize(term).split(/\s+/).filter(Boolean);
-    const searched = items.filter((it) => matchesTerms(it, terms) && (!mundo || mundoDe(it) === mundo));
+    const scores = new Map();
+    const searched = items.filter((it) => {
+      if (mundo && mundoDe(it) !== mundo) return false;
+      if (!term.trim()) return true;
+      const p = relevancia(it, term);
+      if (p) scores.set(it, p);
+      return p > 0;
+    });
     const inCategory = category ? searched.filter((it) => categoryOf(it) === category) : searched;
     const inBrand = brand ? inCategory.filter((it) => brandKey(it) === brand) : inCategory;
-    const shown = inBrand.filter(matchesSpecs).sort(SORTS[sortBy]);
+    // Con una búsqueda y el orden por defecto, primero lo que mejor coincide.
+    const byScore = term.trim() && sortBy === 'nombre' ? (a, b) => scores.get(b) - scores.get(a) || SORTS.nombre(a, b) : SORTS[sortBy];
+    const shown = inBrand.filter(matchesSpecs).sort(byScore);
 
     const sideHead = el('div', 'fhead');
     sideHead.append(withIcon(el('strong', null, 'Filtros'), 'filter'));
@@ -977,11 +1019,12 @@ function pageProducts(params) {
     const catCounts = countBy(searched, categoryOf);
     const catEntries = [
       ['', 'Todas', searched.length, 'grid'],
-      ...alphabetical(catCounts.keys()).map((c) => [c, c, catCounts.get(c), c === OTHERS ? 'box' : iconFor(c)]),
+      ...categoriasEnOrden(catCounts).map((c) => [c, c, catCounts.get(c), c === OTHERS ? 'box' : iconFor(c)]),
     ];
-    const groups = [sideHead, filterGroup('Categorías', catEntries, (v) => v === category, (v) => go('productos', { categoria: v, q: term }), 12)];
+    const groups = [sideHead, filterGroup('Categorías', catEntries, (v) => v === category, (v) => go('productos', { categoria: v, q: term }))];
+    // Marcas y demás filtros solo después de elegir una categoría (y según ella).
     const brandCounts = countBy(inCategory, brandKey);
-    if (brandCounts.size) {
+    if ((category || brand) && brandCounts.size) {
       const entries = byCountDesc(brandCounts).map((k) => [k, brandName(k), brandCounts.get(k)]);
       groups.push(
         filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, mundo: mundo?.id, q: term }), 10),
@@ -1733,7 +1776,7 @@ function pageContact() {
 function fillFooter() {
   const counts = countBy(items, (it) => it.categoria);
   $('foot-cats').replaceChildren(
-    ...byCountDesc(counts).slice(0, 6).map((c) => {
+    ...categoriasEnOrden(counts).slice(0, 6).map((c) => {
       const li = el('li');
       li.append(link(productsHref({ categoria: c }), null, c));
       return li;
@@ -1783,8 +1826,8 @@ $('menu-btn').addEventListener('click', () => {
   $('menu-btn').setAttribute('aria-expanded', String(open));
 });
 
-// Buscar desde la cabecera lleva al catálogo; estando en el catálogo filtra mientras se escribe.
-$('search-form').addEventListener('submit', (e) => {
+// Buscar en el catálogo filtra mientras se escribe; Enter quita el foco (en el teléfono cierra el teclado).
+searchForm.addEventListener('submit', (e) => {
   e.preventDefault();
   q.blur();
   go('productos', { q: q.value.trim() });
@@ -1793,7 +1836,11 @@ q.addEventListener('input', () => {
   const { page, params } = parseRoute();
   if (page !== 'productos') return;
   history.replaceState(null, '', hashFor('productos', { categoria: params.get('categoria'), marca: params.get('marca'), q: q.value.trim() }));
+  // El buscador va dentro de la página que se vuelve a dibujar: se le devuelve el foco y el cursor.
+  const [a, b] = [q.selectionStart, q.selectionEnd];
   render();
+  q.focus({ preventScroll: true });
+  try { q.setSelectionRange(a, b); } catch {}
 });
 
 currency.addEventListener('change', () => {
@@ -1812,6 +1859,14 @@ async function load() {
     .then((r) => (r.ok ? r.json() : []))
     .then((d) => { promos = Array.isArray(d) ? d : []; })
     .catch(() => {});
+  const cargaOrden = fetch('/api/categorias', { headers: { Accept: 'application/json' } })
+    .then((r) => (r.ok ? r.json() : []))
+    .then((d) => {
+      ordenCats = new Map((Array.isArray(d) ? d : [])
+        .filter((c) => c && typeof c.nombre === 'string')
+        .map((c) => [c.nombre, { orden: Number.isInteger(c.orden) ? c.orden : null, vendidas: Number(c.vendidas) || 0 }]));
+    })
+    .catch(() => {});
   try {
     const res = await fetch('/api/stock', { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(String(res.status));
@@ -1819,7 +1874,7 @@ async function load() {
   } catch {
     loadError = true;
   }
-  await Promise.all([estadoPedidos, cargaPromos]);
+  await Promise.all([estadoPedidos, cargaPromos, cargaOrden]);
   aplicarPromos(items, promos);
   buildBrandNames();
   if (!loadError) syncCart();

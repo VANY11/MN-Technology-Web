@@ -128,3 +128,23 @@ export function toPublicPromo(row) {
     lugares: Array.isArray(row.lugares) ? LUGARES.filter((l) => row.lugares.includes(l)) : LUGARES_POR_DEFECTO,
   };
 }
+
+// Orden de las categorías del catálogo, que Yvan arma en MN Tech (Inventario → Categorías, «Orden en la web»). Solo se
+// lee la vista web_categorias_orden: nombre, el número fijado (o null) y las unidades vendidas en 30 días, sin montos.
+// El rol mnstock tiene SELECT sobre la vista, nunca sobre las ventas.
+export const CATS_SQL = `
+  SELECT v.name, v.web_orden, v.vendidas_30d
+  FROM web_categorias_orden v
+`;
+
+export function toPublicCat(row) {
+  const nombre = text(row.name, 120);
+  if (!nombre) return null;
+  const orden = Number(row.web_orden);
+  const vendidas = Number(row.vendidas_30d);
+  return {
+    nombre,
+    orden: Number.isInteger(orden) && orden >= 1 ? orden : null,
+    vendidas: Number.isFinite(vendidas) && vendidas > 0 ? Math.round(vendidas) : 0,
+  };
+}

@@ -76,6 +76,7 @@ sudo cp -r /tmp/mn-web/stock-api/src /tmp/mn-web/stock-api/package.json /tmp/mn-
 cd /opt/mn-stock-api && sudo npm ci --omit=dev
 sudo systemctl restart mn-stock-api
 curl http://127.0.0.1:8080/promociones
+curl http://127.0.0.1:8080/categorias
 ```
 
 La conexión a PostgreSQL usa el socket local con autenticación `peer`, que es la configuración

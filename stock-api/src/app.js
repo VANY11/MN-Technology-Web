@@ -1,6 +1,6 @@
-import { STOCK_SQL, PHOTO_SQL, PROMOS_SQL, toPublicItem, toPublicPromo, localPhotoPath } from './query.js';
+import { STOCK_SQL, PHOTO_SQL, PROMOS_SQL, CATS_SQL, toPublicItem, toPublicPromo, toPublicCat, localPhotoPath } from './query.js';
 
-// Sin la vista de promociones (MN Tech aún sin el módulo) o sin permiso sobre ella: no hay promociones.
+// Sin la vista (MN Tech aún sin ese cambio) o sin permiso sobre ella: lista vacía (promociones, orden de categorías).
 const SIN_PROMOS = new Set(['42P01', '42501']);
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -79,6 +79,17 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
         if (SIN_PROMOS.has(err.code)) return send(res, 200, []);
         log.error('Error leyendo las promociones:', err.message);
         return send(res, 503, { error: 'Promociones no disponibles' });
+      }
+    }
+
+    if (pathname === '/categorias') {
+      try {
+        const { rows } = await query(CATS_SQL);
+        return send(res, 200, rows.map(toPublicCat).filter(Boolean));
+      } catch (err) {
+        if (SIN_PROMOS.has(err.code)) return send(res, 200, []);
+        log.error('Error leyendo el orden de categorías:', err.message);
+        return send(res, 503, { error: 'Categorías no disponibles' });
       }
     }
 
