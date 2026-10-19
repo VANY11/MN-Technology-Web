@@ -1,4 +1,4 @@
-/* Panel /monitor.html: tablero con los colores de la tienda (violeta MN). Oscuro por defecto, claro si el equipo lo pide.
+/* Panel /monitor.html: tablero con los colores de la tienda (violeta MN). Sigue el tema del equipo; el botón ☀/☾ lo fija (tema.js).
    Series: s1/c1 violeta, s2/c2 aqua, c3 naranja (validadas para daltonismo en los dos temas). */
 :root {
   --bg: #0b0918;
@@ -26,7 +26,7 @@
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     --bg: #f5f4fb;
     --surface: #ffffff;
     --surface-2: #f1effa;
@@ -49,6 +49,29 @@
     --shadow: 0 1px 2px rgb(21 18 43 / .04), 0 16px 36px -26px rgb(21 18 43 / .3);
     color-scheme: light;
   }
+}
+:root[data-theme="light"] {
+  --bg: #f5f4fb;
+  --surface: #ffffff;
+  --surface-2: #f1effa;
+  --line: #e5e2f1;
+  --line-soft: #efedf7;
+  --ink: #15122b;
+  --muted: #5f5a7b;
+  --faint: #8d88a8;
+  --brand: #7c3aed;
+  --s1: #6250d6;
+  --s2: #1baf7a;
+  --s3: #eb6834;
+  --ok: #047857;
+  --lento: #b45309;
+  --caido: #dc2626;
+  --config: #a5a1bd;
+  --ok-bg: #e5f7ef;
+  --lento-bg: #fff3dd;
+  --caido-bg: #fde8e8;
+  --shadow: 0 1px 2px rgb(21 18 43 / .04), 0 16px 36px -26px rgb(21 18 43 / .3);
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -221,3 +244,11 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 56px; display: grid
 .m-eventos small { grid-column: 2; color: var(--faint); font-size: 12.5px; }
 
 @media (prefers-reduced-motion: reduce) { *, *::after { animation: none !important; transition: none !important; } }
+
+/* Botón de tema (tema.js): luna en claro, sol en oscuro. */
+.tema-btn { display: inline-grid; place-items: center; width: 40px; padding: 0; align-self: stretch; }
+.tema-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tema-btn .luna { display: none; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .tema-btn .luna { display: block; } :root:not([data-theme="dark"]) .tema-btn .sol { display: none; } }
+:root[data-theme="light"] .tema-btn .luna { display: block; }
+:root[data-theme="light"] .tema-btn .sol { display: none; }

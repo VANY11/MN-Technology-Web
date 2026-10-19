@@ -1,5 +1,5 @@
 /* MN Technology — tienda web. Colores del sistema MN Tech: violeta MN (brand), azul MN (accent)
-   y tinta violeta profunda para las zonas oscuras. Claro por defecto, oscuro si el equipo lo pide. */
+   y tinta violeta profunda para las zonas oscuras. Sigue el tema del equipo; el botón de la cabecera lo fija (tema.js). */
 :root {
   --bg: #f6f5fb;
   --surface: #ffffff;
@@ -29,8 +29,9 @@
   --header: 68px;
   color-scheme: light;
 }
+/* Oscuro: lo pide el equipo (sin elección guardada) o el cliente con el botón de la cabecera (tema.js). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0c0a18;
     --surface: #161425;
     --surface-2: #1c1930;
@@ -50,6 +51,26 @@
     --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -18px rgb(0 0 0 / 0.7);
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0a18;
+  --surface: #161425;
+  --surface-2: #1c1930;
+  --line: #262340;
+  --line-strong: #363350;
+  --ink: #f4f3fa;
+  --muted: #a7a2c2;
+  --faint: #7d7899;
+  --brand: #8b5cf6;
+  --brand-2: #a78bfa;
+  --brand-soft: rgb(139 92 246 / 0.16);
+  --brand-ink: #c4b5fd;
+  --ok: #34d399;
+  --ok-bg: rgb(52 211 153 / 0.12);
+  --low: #fbbf24;
+  --low-bg: rgb(251 191 36 / 0.12);
+  --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -18px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -386,7 +407,8 @@ main > .section:last-child, #app > .section:last-child { padding-bottom: 64px; }
 .phone-row select { flex: 0 0 auto; width: 104px; font-weight: 600; }
 .phone-row .input { flex: 1; min-width: 0; }
 select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(220 38 38 / 0.15); }
-@media (prefers-color-scheme: dark) { .form-error, .field-error { color: #fca5a5; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.form-error, .field-error) { color: #fca5a5; } }
+:root[data-theme="dark"] :is(.form-error, .field-error) { color: #fca5a5; }
 .form-error .small { font-weight: 500; }
 .received { max-width: 620px; margin: 0 auto; }
 .received h1 { margin: 6px 0 0; }
@@ -805,3 +827,15 @@ a.mini-btn { text-decoration: none; }
   .hs-go { padding-inline: 12px; height: 38px; }
   .hs-go .ico { display: none; }
 }
+
+/* ---------- Botón de tema (tema.js): muestra la luna en claro y el sol en oscuro ---------- */
+.tema-btn { flex-shrink: 0; width: 44px; height: 44px; padding: 0; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.tema-btn:hover { border-color: var(--brand); color: var(--brand-ink); }
+.tema-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tema-btn .sol { display: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tema-btn .sol { display: block; } :root:not([data-theme="light"]) .tema-btn .luna { display: none; } }
+:root[data-theme="dark"] .tema-btn .sol { display: block; }
+:root[data-theme="dark"] .tema-btn .luna { display: none; }
+@media (max-width: 640px) { .tema-btn { width: 40px; height: 40px; } }
+/* Celular angosto: con el botón de tema la fila no cabe; queda el monograma MN como marca. */
+@media (max-width: 440px) { .brand-text { display: none; } }
