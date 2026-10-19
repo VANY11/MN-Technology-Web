@@ -1,4 +1,4 @@
-// Efectos de ratón y clic (el cursor «Flecha MN» va en styles.css; aquí su estela de luz): luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
+// Efectos de ratón y clic (el cursor «Flecha MN» va en styles.css): luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
 // reacciona, chispas al hacer clic, producto que vuela al carrito y tarjetas que aparecen al bajar.
 // Nada de esto es necesario para usar la web: con «reducir movimiento» no se activa, y en pantallas táctiles solo
 // quedan las chispas, el vuelo al carrito y la aparición al bajar.
@@ -104,70 +104,6 @@ function chispas(e) {
   setTimeout(() => capa.remove(), 700);
 }
 
-/* ---------- Estela de luz detrás de la flecha ---------- */
-
-// Un lienzo fijo encima de todo dibuja una estela corta de puntos morados y azules que se apagan.
-const VIDA_ESTELA = 420; // ms que dura cada punto
-function prepararEstela() {
-  if (quieto.matches || !fino.matches) return;
-  const lienzo = document.createElement('canvas');
-  lienzo.className = 'fx-estela';
-  lienzo.setAttribute('aria-hidden', 'true');
-  document.body.append(lienzo);
-  const ctx = lienzo.getContext('2d');
-  if (!ctx) return;
-  let puntos = [];
-  let dibujando = false;
-  const medir = () => {
-    const r = window.devicePixelRatio || 1;
-    lienzo.width = innerWidth * r;
-    lienzo.height = innerHeight * r;
-    ctx.setTransform(r, 0, 0, r, 0, 0);
-  };
-  medir();
-  addEventListener('resize', medir);
-
-  const dibujar = () => {
-    const ahora = performance.now();
-    puntos = puntos.filter((p) => ahora - p.t < VIDA_ESTELA);
-    ctx.clearRect(0, 0, innerWidth, innerHeight);
-    for (const [i, p] of puntos.entries()) {
-      const vida = 1 - (ahora - p.t) / VIDA_ESTELA;
-      const radio = 1.5 + vida * 6;
-      const azul = i % 3 === 0;
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radio * 1.8);
-      g.addColorStop(0, azul ? `rgba(147, 197, 253, ${0.9 * vida})` : `rgba(196, 181, 253, ${0.9 * vida})`);
-      g.addColorStop(1, 'rgba(139, 92, 246, 0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, radio * 1.8, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (puntos.length) requestAnimationFrame(dibujar);
-    else dibujando = false;
-  };
-
-  let ultimo = null;
-  document.addEventListener('pointermove', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    // Las ventanas (ficha, compartir) tapan lo que está en body: el lienzo se muda a la que esté abierta.
-    const host = document.querySelector('dialog[open]') || document.body;
-    if (lienzo.parentNode !== host) host.append(lienzo);
-    const t = performance.now();
-    // Puntos intermedios para que la estela no salga cortada al mover rápido.
-    if (ultimo) {
-      const dx = e.clientX - ultimo.x, dy = e.clientY - ultimo.y;
-      const pasos = Math.min(6, Math.floor(Math.hypot(dx, dy) / 10));
-      for (let k = 1; k <= pasos; k++) puntos.push({ x: ultimo.x + (dx * k) / (pasos + 1), y: ultimo.y + (dy * k) / (pasos + 1), t });
-    }
-    puntos.push({ x: e.clientX, y: e.clientY, t });
-    if (puntos.length > 60) puntos = puntos.slice(-60);
-    ultimo = { x: e.clientX, y: e.clientY };
-    if (!dibujando) { dibujando = true; requestAnimationFrame(dibujar); }
-  }, { passive: true });
-  document.documentElement.addEventListener('mouseleave', () => { ultimo = null; });
-}
-
 /* ---------- El producto vuela al carrito ---------- */
 
 // Busca la foto que está junto al botón (tarjeta, vitrina o ficha) y la lleva hasta el carrito.
@@ -261,5 +197,4 @@ export function iniciarEfectos(app) {
   document.addEventListener('pointerout', soltarLuz, { passive: true });
   document.addEventListener('pointerdown', chispas, { passive: true });
   prepararAparicion(app);
-  prepararEstela();
 }
