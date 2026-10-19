@@ -24,6 +24,10 @@ export const STORE = {
     sugerencias: ['¿Tienen disponible…?', '¿Qué formas de pago aceptan?', '¿Hacen envíos?', 'Quiero hablar con un asesor'],
   },
 
+  // Decoración navideña (navidad.js + navidad.css). Se enciende sola entre «desde» y «hasta» (mes-día, cruza el año).
+  // estilo: 'nieve', 'luces' o 'completa'; '' la apaga. Para probar sin esperar: añade ?navidad=nieve|luces|completa|no a la dirección.
+  navidad: { estilo: 'completa', desde: '11-01', hasta: '01-06' },
+
   // Página «Nosotros».
   nosotros: {
     etiqueta: 'MN Technology // Tecnología a tu alcance',
