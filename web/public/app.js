@@ -26,6 +26,8 @@ const detail = $('detail');
 
 let items = [];
 let promos = [];
+// Orden de las categorías que Yvan arma en MN Tech: nombre → { orden (fijada) | null, vendidas en 30 días }.
+let ordenCats = new Map();
 let loadError = false;
 let pedidosOnline = false; // la web guarda el pedido en el sistema MN Tech (GET /api/pedido)
 // Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
@@ -141,8 +143,17 @@ function countBy(list, keyFn) {
 
 const byCountDesc = (counts) =>
   [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a) || String(a).localeCompare(String(b), 'es'));
-const alphabetical = (names) =>
-  [...names].sort((a, b) => (a === OTHERS ? 1 : b === OTHERS ? -1 : a.localeCompare(b, 'es', { sensitivity: 'base' })));
+// Categorías en el orden de MN Tech: primero las fijadas por su número, después las que más se venden y, a igual
+// venta (o sin datos del servidor), las que tienen más productos. «Otros» siempre al final.
+const categoriasEnOrden = (counts) => {
+  const info = (c) => ordenCats.get(c) || { orden: null, vendidas: 0 };
+  return [...counts.keys()].sort((a, b) => {
+    if (a === OTHERS || b === OTHERS) return a === OTHERS ? 1 : -1;
+    const x = info(a), y = info(b);
+    if ((x.orden === null) !== (y.orden === null)) return x.orden === null ? 1 : -1;
+    return (x.orden ?? 0) - (y.orden ?? 0) || y.vendidas - x.vendidas || counts.get(b) - counts.get(a) || String(a).localeCompare(String(b), 'es');
+  });
+};
 
 function stockBadge(n) {
   if (n <= LOW_STOCK) return [n === 1 ? 'Última unidad' : `Últimas ${n}`, 'low'];
@@ -784,13 +795,8 @@ function searchHero() {
   const results = el('ul', 'hs-results');
   results.id = 'hs-results';
   results.hidden = true;
-  const all = withIcon(link('#/productos', 'btn btn-outline hs-all', `Ver todo el catálogo (${number.format(items.length)} productos)`), 'arrow', true);
-
-  const chips = el('div', 'hs-chips');
-  chips.append(el('span', 'hs-chips-label', 'Lo más buscado:'));
-  for (const name of byCountDesc(countBy(items, categoryOf)).filter((c) => c !== OTHERS).slice(0, 6)) {
-    chips.append(link(productsHref({ categoria: name }), 'hs-chip', name));
-  }
+  // Las categorías van justo debajo del buscador (pageHome): aquí solo el atajo al catálogo completo.
+  const all = withIcon(link('#/productos', 'link-more hs-all', `Ver todo el catálogo (${number.format(items.length)} productos)`), 'arrow', true);
 
   const buscarAhora = () => {
     const t = input.value.trim();
@@ -830,7 +836,7 @@ function searchHero() {
   });
   document.addEventListener('click', (e) => { if (!sec.contains(e.target)) results.hidden = true; });
 
-  box.append(form, results, chips, all);
+  box.append(form, results, all);
   sec.append(box);
   return sec;
 }
@@ -838,37 +844,14 @@ function searchHero() {
 function pageHome() {
   const frag = document.createDocumentFragment();
   const catCounts = countBy(items, (it) => it.categoria);
-  const topCats = byCountDesc(catCounts);
+  const topCats = categoriasEnOrden(catCounts);
 
   // Portada: la vitrina en vivo.
   frag.append(showcase());
 
   frag.append(searchHero());
 
-  // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
-  const nuevos = promoCards('nuevos').cards;
-  if (nuevos.length) frag.append(carouselSection('Nuevo en MN Tech', nuevos, 'Recién llegados, reposiciones y servicios nuevos'));
-
-  // Marcas en movimiento (la lista va dos veces para que el desplazamiento no tenga cortes).
-  const brands = byCountDesc(countBy(items, brandKey)).slice(0, 24);
-  if (brands.length) {
-    const strip = el('section', 'brands');
-    strip.setAttribute('aria-label', 'Marcas');
-    const track = el('div', 'brands-track');
-    for (const copy of [0, 1]) {
-      for (const k of brands) {
-        const a = link(productsHref({ marca: k }), 'brand-pill', brandName(k));
-        if (copy) {
-          a.setAttribute('aria-hidden', 'true');
-          a.tabIndex = -1;
-        }
-        track.append(a);
-      }
-    }
-    strip.append(track);
-    frag.append(strip);
-  }
-
+  // Categorías justo debajo del buscador, en el orden de MN Tech.
   const catSec = el('section', 'section wrap');
   const head = el('div', 'section-head');
   head.append(el('h2', null, 'Explora por categoría'), link('#/productos', 'link-more', 'Ver todo el catálogo'));
@@ -885,6 +868,11 @@ function pageHome() {
   }
   catSec.append(tiles);
   frag.append(catSec);
+
+  // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
+  const nuevos = promoCards('nuevos').cards;
+  if (nuevos.length) frag.append(carouselSection('Nuevo en MN Tech', nuevos, 'Recién llegados, reposiciones y servicios nuevos'));
+
 
   // Destacados: primero lo que Yvan marca en MN Tech; después, con foto primero y los de más existencias.
   const marcados = promoCards('destacados');
@@ -1042,7 +1030,7 @@ function pageProducts(params) {
     const catCounts = countBy(searched, categoryOf);
     const catEntries = [
       ['', 'Todas', searched.length, 'grid'],
-      ...alphabetical(catCounts.keys()).map((c) => [c, c, catCounts.get(c), c === OTHERS ? 'box' : iconFor(c)]),
+      ...categoriasEnOrden(catCounts).map((c) => [c, c, catCounts.get(c), c === OTHERS ? 'box' : iconFor(c)]),
     ];
     const groups = [sideHead, filterGroup('Categorías', catEntries, (v) => v === category, (v) => go('productos', { categoria: v, q: term }))];
     // Marcas y demás filtros solo después de elegir una categoría (y según ella).
@@ -1799,7 +1787,7 @@ function pageContact() {
 function fillFooter() {
   const counts = countBy(items, (it) => it.categoria);
   $('foot-cats').replaceChildren(
-    ...byCountDesc(counts).slice(0, 6).map((c) => {
+    ...categoriasEnOrden(counts).slice(0, 6).map((c) => {
       const li = el('li');
       li.append(link(productsHref({ categoria: c }), null, c));
       return li;
@@ -1878,6 +1866,14 @@ async function load() {
     .then((r) => (r.ok ? r.json() : []))
     .then((d) => { promos = Array.isArray(d) ? d : []; })
     .catch(() => {});
+  const cargaOrden = fetch('/api/categorias', { headers: { Accept: 'application/json' } })
+    .then((r) => (r.ok ? r.json() : []))
+    .then((d) => {
+      ordenCats = new Map((Array.isArray(d) ? d : [])
+        .filter((c) => c && typeof c.nombre === 'string')
+        .map((c) => [c.nombre, { orden: Number.isInteger(c.orden) ? c.orden : null, vendidas: Number(c.vendidas) || 0 }]));
+    })
+    .catch(() => {});
   try {
     const res = await fetch('/api/stock', { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(String(res.status));
@@ -1885,7 +1881,7 @@ async function load() {
   } catch {
     loadError = true;
   }
-  await Promise.all([estadoPedidos, cargaPromos]);
+  await Promise.all([estadoPedidos, cargaPromos, cargaOrden]);
   aplicarPromos(items, promos);
   buildBrandNames();
   if (!loadError) syncCart();

@@ -154,3 +154,30 @@ test('sin la vista de promociones responde una lista vacía; otro error, 503', a
   await withServer(fail('42501'), async (base) => assert.deepEqual(await (await fetch(`${base}/promociones`)).json(), []));
   await withServer(fail('57014'), async (base) => assert.equal((await fetch(`${base}/promociones`)).status, 503));
 });
+
+test('GET /categorias lee solo la vista de orden y manda nombre, orden y vendidas', async () => {
+  let sql = '';
+  const query = async (q) => {
+    sql = q;
+    return { rows: [
+      { name: ' Forros ', web_orden: 2, vendidas_30d: '14' },
+      { name: 'Pantallas', web_orden: null, vendidas_30d: 0 },
+      { name: '  ', web_orden: 1, vendidas_30d: 3 },
+    ] };
+  };
+  await withServer(query, async (base) => {
+    const body = await (await fetch(`${base}/categorias`)).json();
+    assert.match(sql, /FROM web_categorias_orden v/);
+    assert.doesNotMatch(sql, /mnstore_sales/);
+    assert.deepEqual(body, [
+      { nombre: 'Forros', orden: 2, vendidas: 14 },
+      { nombre: 'Pantallas', orden: null, vendidas: 0 },
+    ]);
+  });
+});
+
+test('sin la vista de orden de categorías responde una lista vacía; otro error, 503', async () => {
+  const fail = (code) => async () => { throw Object.assign(new Error('x'), { code }); };
+  await withServer(fail('42P01'), async (base) => assert.deepEqual(await (await fetch(`${base}/categorias`)).json(), []));
+  await withServer(fail('57014'), async (base) => assert.equal((await fetch(`${base}/categorias`)).status, 503));
+});
