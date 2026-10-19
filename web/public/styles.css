@@ -659,6 +659,9 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
   :is(a, button, summary, label, select, [role=button]):not(:disabled) { cursor: url(/cursor-mano.svg) 11 4, pointer !important; }
   :is(input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea) { cursor: text; }
 }
+.fx-halo { position: fixed; left: 0; top: 0; z-index: 999; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; pointer-events: none; opacity: 0; transition: opacity .35s;
+  background: radial-gradient(circle, rgb(196 181 253 / 0.45), rgb(139 92 246 / 0.18) 50%, transparent 70%); will-change: transform; }
+.fx-halo.visible { opacity: 1; }
 
 /* El producto vuela al carrito y el carrito late. */
 .fx-fly { position: fixed; z-index: 1000; pointer-events: none; object-fit: contain; border-radius: 16px; background: #fff; box-shadow: 0 18px 40px -12px rgb(91 33 182 / 0.7); }

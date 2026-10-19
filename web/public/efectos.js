@@ -1,4 +1,4 @@
-// Efectos de ratón y clic (el cursor «Flecha MN» va en styles.css): luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
+// Efectos de ratón y clic (el cursor «Flecha MN» va en styles.css; aquí su halo suave): luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
 // reacciona, chispas al hacer clic, producto que vuela al carrito y tarjetas que aparecen al bajar.
 // Nada de esto es necesario para usar la web: con «reducir movimiento» no se activa, y en pantallas táctiles solo
 // quedan las chispas, el vuelo al carrito y la aparición al bajar.
@@ -104,6 +104,39 @@ function chispas(e) {
   setTimeout(() => capa.remove(), 700);
 }
 
+/* ---------- Halo suave detrás de la flecha ---------- */
+
+// Un solo brillo tenue que acompaña la punta del cursor con un pequeño retraso; se apaga si el ratón se queda quieto.
+function prepararHalo() {
+  if (quieto.matches || !fino.matches) return;
+  const halo = document.createElement('span');
+  halo.className = 'fx-halo';
+  halo.setAttribute('aria-hidden', 'true');
+  document.body.append(halo);
+  let x = 0, y = 0, hx = 0, hy = 0, corriendo = false, apagar = 0;
+  const paso = () => {
+    hx += (x - hx) * 0.22;
+    hy += (y - hy) * 0.22;
+    halo.style.transform = `translate3d(${hx.toFixed(1)}px, ${hy.toFixed(1)}px, 0)`;
+    if (Math.abs(x - hx) + Math.abs(y - hy) > 0.3) requestAnimationFrame(paso);
+    else corriendo = false;
+  };
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    // Las ventanas (ficha, compartir) tapan lo que está en body: el halo se muda a la que esté abierta.
+    const host = document.querySelector('dialog[open]') || document.body;
+    if (halo.parentNode !== host) host.append(halo);
+    if (!halo.classList.contains('visible')) { hx = e.clientX; hy = e.clientY; }
+    x = e.clientX;
+    y = e.clientY;
+    halo.classList.add('visible');
+    clearTimeout(apagar);
+    apagar = setTimeout(() => halo.classList.remove('visible'), 1200);
+    if (!corriendo) { corriendo = true; requestAnimationFrame(paso); }
+  }, { passive: true });
+  document.documentElement.addEventListener('mouseleave', () => halo.classList.remove('visible'));
+}
+
 /* ---------- El producto vuela al carrito ---------- */
 
 // Busca la foto que está junto al botón (tarjeta, vitrina o ficha) y la lleva hasta el carrito.
@@ -197,4 +230,5 @@ export function iniciarEfectos(app) {
   document.addEventListener('pointerout', soltarLuz, { passive: true });
   document.addEventListener('pointerdown', chispas, { passive: true });
   prepararAparicion(app);
+  prepararHalo();
 }
