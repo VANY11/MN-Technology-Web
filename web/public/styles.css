@@ -662,6 +662,12 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
 .fx-halo { position: fixed; left: 0; top: 0; z-index: 999; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; pointer-events: none; opacity: 0; transition: opacity .35s;
   background: radial-gradient(circle, rgb(196 181 253 / 0.45), rgb(139 92 246 / 0.18) 50%, transparent 70%); will-change: transform; }
 .fx-halo.visible { opacity: 1; }
+.fx-lienzo { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 999; pointer-events: none; }
+.fx-chispita { position: fixed; z-index: 999; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; background: #ddd6fe;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); filter: drop-shadow(0 0 4px #8b5cf6);
+  animation: fx-chispita .75s ease-out forwards; }
+.fx-chispita.azul { background: #93c5fd; filter: drop-shadow(0 0 4px #3b82f6); }
+@keyframes fx-chispita { from { opacity: 1; transform: translateY(0) scale(var(--s, 1)) rotate(0); } to { opacity: 0; transform: translateY(16px) scale(calc(var(--s, 1) * .4)) rotate(90deg); } }
 
 /* El producto vuela al carrito y el carrito late. */
 .fx-fly { position: fixed; z-index: 1000; pointer-events: none; object-fit: contain; border-radius: 16px; background: #fff; box-shadow: 0 18px 40px -12px rgb(91 33 182 / 0.7); }

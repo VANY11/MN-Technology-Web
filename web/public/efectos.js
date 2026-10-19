@@ -137,6 +137,79 @@ function prepararHalo() {
   document.documentElement.addEventListener('mouseleave', () => halo.classList.remove('visible'));
 }
 
+/* ---------- Cola fina detrás de la flecha ---------- */
+
+// Una sola línea delgada que sigue a la punta y se apaga enseguida (como un cometa).
+const VIDA_COLA = 160; // ms de recorrido que se dibujan
+function prepararCola() {
+  if (quieto.matches || !fino.matches) return;
+  const lienzo = document.createElement('canvas');
+  lienzo.className = 'fx-lienzo';
+  lienzo.setAttribute('aria-hidden', 'true');
+  document.body.append(lienzo);
+  const ctx = lienzo.getContext('2d');
+  if (!ctx) return;
+  let puntos = [];
+  let dibujando = false;
+  const medir = () => {
+    const r = window.devicePixelRatio || 1;
+    lienzo.width = innerWidth * r;
+    lienzo.height = innerHeight * r;
+    ctx.setTransform(r, 0, 0, r, 0, 0);
+  };
+  medir();
+  addEventListener('resize', medir);
+  const dibujar = () => {
+    const ahora = performance.now();
+    puntos = puntos.filter((p) => ahora - p.t < VIDA_COLA);
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    ctx.lineCap = 'round';
+    for (let i = 1; i < puntos.length; i++) {
+      const vida = 1 - (ahora - puntos[i].t) / VIDA_COLA;
+      ctx.strokeStyle = `rgba(${i % 2 ? '196, 181, 253' : '147, 197, 253'}, ${(0.95 * vida).toFixed(3)})`;
+      ctx.lineWidth = 0.8 + vida * 2.6;
+      ctx.beginPath();
+      ctx.moveTo(puntos[i - 1].x, puntos[i - 1].y);
+      ctx.lineTo(puntos[i].x, puntos[i].y);
+      ctx.stroke();
+    }
+    if (puntos.length) requestAnimationFrame(dibujar);
+    else dibujando = false;
+  };
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const host = document.querySelector('dialog[open]') || document.body;
+    if (lienzo.parentNode !== host) host.append(lienzo);
+    puntos.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+    if (!dibujando) { dibujando = true; requestAnimationFrame(dibujar); }
+  }, { passive: true });
+}
+
+/* ---------- Chispitas sueltas detrás de la flecha ---------- */
+
+// Cada tanto recorrido suelta un destello pequeño que cae un poco y se apaga.
+function prepararChispitas() {
+  if (quieto.matches || !fino.matches) return;
+  let ultimo = null;
+  let recorrido = 0;
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    if (ultimo) recorrido += Math.hypot(e.clientX - ultimo.x, e.clientY - ultimo.y);
+    ultimo = { x: e.clientX, y: e.clientY };
+    if (recorrido < 70) return;
+    recorrido = 0;
+    const c = document.createElement('span');
+    c.className = `fx-chispita${Math.random() < 0.4 ? ' azul' : ''}`;
+    c.setAttribute('aria-hidden', 'true');
+    c.style.left = `${e.clientX + (Math.random() * 16 - 8)}px`;
+    c.style.top = `${e.clientY + (Math.random() * 10)}px`;
+    c.style.setProperty('--s', (0.6 + Math.random() * 0.6).toFixed(2));
+    (document.querySelector('dialog[open]') || document.body).append(c);
+    setTimeout(() => c.remove(), 750);
+  }, { passive: true });
+  document.documentElement.addEventListener('mouseleave', () => { ultimo = null; });
+}
+
 /* ---------- El producto vuela al carrito ---------- */
 
 // Busca la foto que está junto al botón (tarjeta, vitrina o ficha) y la lleva hasta el carrito.
@@ -230,5 +303,9 @@ export function iniciarEfectos(app) {
   document.addEventListener('pointerout', soltarLuz, { passive: true });
   document.addEventListener('pointerdown', chispas, { passive: true });
   prepararAparicion(app);
-  prepararHalo();
+  // Efecto del cursor: halo por defecto; ?cursor=cola, ?cursor=chispitas o ?cursor=ninguno para probar otros.
+  const efecto = new URLSearchParams(location.search).get('cursor');
+  if (efecto === 'cola') prepararCola();
+  else if (efecto === 'chispitas') prepararChispitas();
+  else if (efecto !== 'ninguno') prepararHalo();
 }
