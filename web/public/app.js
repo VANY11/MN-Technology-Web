@@ -2,6 +2,7 @@ import { icon, iconFor } from './icons.js';
 import { STORE } from './config.js';
 import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
 import { aplicarPromos, etiquetaPromo, enLugar } from './promos.js';
+import { indice, puntaje } from './buscar.js';
 import { iniciarEfectos, volarAlCarrito, celebrarEnFicha } from './efectos.js';
 
 const LOW_STOCK = 3;
@@ -757,24 +758,80 @@ function showcase() {
 
 /* ---------- Inicio ---------- */
 
-// «Mundos MN»: cuatro tarjetas grandes (los íconos del logo) con foto, cantidad y enlace a sus productos.
-function mundosSection() {
-  const sec = el('section', 'mundos wrap');
-  sec.setAttribute('aria-label', 'Mundos MN');
-  MUNDOS.forEach((m, i) => {
-    const list = items.filter((it) => it.disponible > 0 && mundoDe(it) === m);
-    if (!list.length) return;
-    const muestra = list.filter((it) => safePhoto(it.foto)).sort((a, b) => b.disponible - a.disponible)[0] || list[0];
-    const a = link(productsHref({ mundo: m.id }), `mundo mundo-${i + 1}`);
-    const txt = el('div', 'mundo-text');
-    const ic = el('span', 'mundo-icon');
-    ic.append(icon(m.icono));
-    txt.append(ic, el('h3', null, m.nombre), el('p', null, m.texto), withIcon(el('span', 'mundo-count', plural(list.length, 'producto', 'productos')), 'arrow', true));
-    const photo = el('div', 'mundo-photo');
-    photoInto(photo, muestra);
-    a.append(txt, photo);
-    sec.append(a);
+// Buscador grande del inicio: busca mientras se escribe (con errores de ortografía incluidos), muestra las
+// primeras coincidencias con foto y precio, sugiere categorías y lleva al catálogo completo.
+function searchHero() {
+  const sec = el('section', 'hero-search wrap');
+  sec.setAttribute('aria-label', 'Buscar productos');
+  const box = el('div', 'hs-box');
+  box.append(el('h2', 'hs-title', '¿Qué estás buscando?'), el('p', 'hs-sub', 'Escribe el producto, la marca o el modelo. Te entendemos aunque lo escribas con errores.'));
+
+  const form = el('form', 'hs-form');
+  form.setAttribute('role', 'search');
+  const field = el('div', 'hs-field');
+  field.append(icon('search', 'hs-icon'));
+  const input = el('input', 'hs-input');
+  input.type = 'search';
+  input.placeholder = 'Ej: audífonos bluetooth, forro A16, cargador tipo C…';
+  input.autocomplete = 'off';
+  input.setAttribute('aria-label', 'Buscar productos');
+  input.setAttribute('aria-controls', 'hs-results');
+  const go1 = withIcon(el('button', 'btn hs-go', 'Buscar'), 'arrow', true);
+  go1.type = 'submit';
+  field.append(input, go1);
+  form.append(field);
+
+  const results = el('ul', 'hs-results');
+  results.id = 'hs-results';
+  results.hidden = true;
+  const all = withIcon(link('#/productos', 'btn btn-outline hs-all', `Ver todo el catálogo (${number.format(items.length)} productos)`), 'arrow', true);
+
+  const chips = el('div', 'hs-chips');
+  chips.append(el('span', 'hs-chips-label', 'Lo más buscado:'));
+  for (const name of byCountDesc(countBy(items, categoryOf)).filter((c) => c !== OTHERS).slice(0, 6)) {
+    chips.append(link(productsHref({ categoria: name }), 'hs-chip', name));
+  }
+
+  const buscarAhora = () => {
+    const t = input.value.trim();
+    if (t.length < 2) { results.hidden = true; return; }
+    const top = items
+      .map((it) => [it, relevancia(it, t)])
+      .filter(([, p]) => p > 0)
+      .sort((a, b) => b[1] - a[1] || b[0].disponible - a[0].disponible)
+      .slice(0, 6);
+    const lis = top.map(([it]) => {
+      const li = el('li');
+      const b = el('button', 'hs-item');
+      b.type = 'button';
+      const ph = el('span', 'hs-photo');
+      photoInto(ph, it);
+      const info = el('span', 'hs-info');
+      info.append(el('span', 'hs-name', it.nombre), el('span', 'hs-cat', categoryOf(it)));
+      b.append(ph, info, el('span', 'hs-price', priceText(it) || 'Consultar'));
+      b.addEventListener('click', () => showDetail(it));
+      li.append(b);
+      return li;
+    });
+    const total = items.filter((it) => relevancia(it, t) > 0).length;
+    const ver = el('li', 'hs-more');
+    ver.append(total
+      ? withIcon(link(productsHref({ q: t }), 'link-more', `Ver los ${number.format(total)} resultados`), 'arrow', true)
+      : el('span', 'muted', `No encontramos «${t}». Prueba con otra palabra o mira el catálogo completo.`));
+    results.replaceChildren(...lis, ver);
+    results.hidden = false;
+  };
+  let espera = 0;
+  input.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(buscarAhora, 120); });
+  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) buscarAhora(); });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    go('productos', { q: input.value.trim() });
   });
+  document.addEventListener('click', (e) => { if (!sec.contains(e.target)) results.hidden = true; });
+
+  box.append(form, results, chips, all);
+  sec.append(box);
   return sec;
 }
 
@@ -786,7 +843,7 @@ function pageHome() {
   // Portada: la vitrina en vivo.
   frag.append(showcase());
 
-  frag.append(mundosSection());
+  frag.append(searchHero());
 
   // Nuevos: lo que Yvan marca en MN Tech como recién llegado o servicio nuevo.
   const nuevos = promoCards('nuevos').cards;
@@ -855,13 +912,13 @@ function pageHome() {
 
 /* ---------- Productos ---------- */
 
-const matchesTerms = (it, terms) => {
-  if (!terms.length) return true;
-  const text = normalize(
-    [it.nombre, it.marca, it.modelo, it.codigo, it.categoria, ...specList(it).map((x) => x.valor)].filter(Boolean).join(' '),
-  );
-  return terms.every((t) => text.includes(t));
+// Búsqueda tolerante a errores (buscar.js): el índice de cada producto se arma una vez.
+const indices = new WeakMap();
+const indiceDe = (it) => {
+  if (!indices.has(it)) indices.set(it, indice([it.nombre, it.marca, it.modelo, it.codigo, it.categoria, ...specList(it).map((x) => x.valor)]));
+  return indices.get(it);
 };
+const relevancia = (it, term) => puntaje(indiceDe(it), term);
 
 const matchesSpecs = (item) => {
   for (const [campo, valores] of specFilters) {
@@ -960,11 +1017,19 @@ function pageProducts(params) {
   main.append(head, status, grid, moreWrap);
 
   function draw() {
-    const terms = normalize(term).split(/\s+/).filter(Boolean);
-    const searched = items.filter((it) => matchesTerms(it, terms) && (!mundo || mundoDe(it) === mundo));
+    const scores = new Map();
+    const searched = items.filter((it) => {
+      if (mundo && mundoDe(it) !== mundo) return false;
+      if (!term.trim()) return true;
+      const p = relevancia(it, term);
+      if (p) scores.set(it, p);
+      return p > 0;
+    });
     const inCategory = category ? searched.filter((it) => categoryOf(it) === category) : searched;
     const inBrand = brand ? inCategory.filter((it) => brandKey(it) === brand) : inCategory;
-    const shown = inBrand.filter(matchesSpecs).sort(SORTS[sortBy]);
+    // Con una búsqueda y el orden por defecto, primero lo que mejor coincide.
+    const byScore = term.trim() && sortBy === 'nombre' ? (a, b) => scores.get(b) - scores.get(a) || SORTS.nombre(a, b) : SORTS[sortBy];
+    const shown = inBrand.filter(matchesSpecs).sort(byScore);
 
     const sideHead = el('div', 'fhead');
     sideHead.append(withIcon(el('strong', null, 'Filtros'), 'filter'));
@@ -979,9 +1044,10 @@ function pageProducts(params) {
       ['', 'Todas', searched.length, 'grid'],
       ...alphabetical(catCounts.keys()).map((c) => [c, c, catCounts.get(c), c === OTHERS ? 'box' : iconFor(c)]),
     ];
-    const groups = [sideHead, filterGroup('Categorías', catEntries, (v) => v === category, (v) => go('productos', { categoria: v, q: term }), 12)];
+    const groups = [sideHead, filterGroup('Categorías', catEntries, (v) => v === category, (v) => go('productos', { categoria: v, q: term }))];
+    // Marcas y demás filtros solo después de elegir una categoría (y según ella).
     const brandCounts = countBy(inCategory, brandKey);
-    if (brandCounts.size) {
+    if ((category || brand) && brandCounts.size) {
       const entries = byCountDesc(brandCounts).map((k) => [k, brandName(k), brandCounts.get(k)]);
       groups.push(
         filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, mundo: mundo?.id, q: term }), 10),
