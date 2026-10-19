@@ -1,4 +1,4 @@
-// Efectos de ratón y clic (el cursor «Flecha MN» va en styles.css; aquí su halo suave): luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
+// Efectos de ratón y clic (el cursor «Flecha MN» va en styles.css; aquí sus chispitas): luz que sigue al cursor e inclinación 3D en las tarjetas, fondo de la vitrina que
 // reacciona, chispas al hacer clic, producto que vuela al carrito y tarjetas que aparecen al bajar.
 // Nada de esto es necesario para usar la web: con «reducir movimiento» no se activa, y en pantallas táctiles solo
 // quedan las chispas, el vuelo al carrito y la aparición al bajar.
@@ -104,37 +104,29 @@ function chispas(e) {
   setTimeout(() => capa.remove(), 700);
 }
 
-/* ---------- Halo suave detrás de la flecha ---------- */
+/* ---------- Chispitas sueltas detrás de la flecha ---------- */
 
-// Un solo brillo tenue que acompaña la punta del cursor con un pequeño retraso; se apaga si el ratón se queda quieto.
-function prepararHalo() {
+// Cada tanto recorrido suelta un destello pequeño que cae un poco y se apaga.
+function prepararChispitas() {
   if (quieto.matches || !fino.matches) return;
-  const halo = document.createElement('span');
-  halo.className = 'fx-halo';
-  halo.setAttribute('aria-hidden', 'true');
-  document.body.append(halo);
-  let x = 0, y = 0, hx = 0, hy = 0, corriendo = false, apagar = 0;
-  const paso = () => {
-    hx += (x - hx) * 0.22;
-    hy += (y - hy) * 0.22;
-    halo.style.transform = `translate3d(${hx.toFixed(1)}px, ${hy.toFixed(1)}px, 0)`;
-    if (Math.abs(x - hx) + Math.abs(y - hy) > 0.3) requestAnimationFrame(paso);
-    else corriendo = false;
-  };
+  let ultimo = null;
+  let recorrido = 0;
   document.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
-    // Las ventanas (ficha, compartir) tapan lo que está en body: el halo se muda a la que esté abierta.
-    const host = document.querySelector('dialog[open]') || document.body;
-    if (halo.parentNode !== host) host.append(halo);
-    if (!halo.classList.contains('visible')) { hx = e.clientX; hy = e.clientY; }
-    x = e.clientX;
-    y = e.clientY;
-    halo.classList.add('visible');
-    clearTimeout(apagar);
-    apagar = setTimeout(() => halo.classList.remove('visible'), 1200);
-    if (!corriendo) { corriendo = true; requestAnimationFrame(paso); }
+    if (ultimo) recorrido += Math.hypot(e.clientX - ultimo.x, e.clientY - ultimo.y);
+    ultimo = { x: e.clientX, y: e.clientY };
+    if (recorrido < 70) return;
+    recorrido = 0;
+    const c = document.createElement('span');
+    c.className = `fx-chispita${Math.random() < 0.4 ? ' azul' : ''}`;
+    c.setAttribute('aria-hidden', 'true');
+    c.style.left = `${e.clientX + (Math.random() * 16 - 8)}px`;
+    c.style.top = `${e.clientY + (Math.random() * 10)}px`;
+    c.style.setProperty('--s', (0.6 + Math.random() * 0.6).toFixed(2));
+    (document.querySelector('dialog[open]') || document.body).append(c);
+    setTimeout(() => c.remove(), 750);
   }, { passive: true });
-  document.documentElement.addEventListener('mouseleave', () => halo.classList.remove('visible'));
+  document.documentElement.addEventListener('mouseleave', () => { ultimo = null; });
 }
 
 /* ---------- El producto vuela al carrito ---------- */
@@ -230,5 +222,5 @@ export function iniciarEfectos(app) {
   document.addEventListener('pointerout', soltarLuz, { passive: true });
   document.addEventListener('pointerdown', chispas, { passive: true });
   prepararAparicion(app);
-  prepararHalo();
+  prepararChispitas();
 }
