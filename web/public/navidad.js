@@ -32,7 +32,7 @@ export function estiloActivo(cfg, busqueda = '', fecha = new Date()) {
 
 const quieto = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: true };
 
-/* ---------- Monograma MN con gorro y luces ---------- */
+/* ---------- Gorro y luces sobre el monograma MN ---------- */
 
 const SVG = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}) => {
@@ -41,21 +41,16 @@ const svg = (tag, attrs = {}) => {
   return n;
 };
 
-// Cambia la «M» genérica del cuadrito (cabecera y pie) por el monograma MN de circuito del logo, con un gorro de
-// Santa en la esquina y una tira de luces por encima. El texto «MN Technology» de al lado no cambia.
+// Le pone al monograma MN de la cabecera y del pie un gorro de Santa en la esquina y una tira de luces por encima.
 function logos() {
-  for (const mark of document.querySelectorAll('.brand .mark')) {
+  for (const img of document.querySelectorAll('.brand .logo-mn')) {
     const caja = document.createElement('span');
     caja.className = 'nv-logo';
     caja.setAttribute('aria-hidden', 'true');
-    const img = document.createElement('img');
-    img.src = '/navidad-mn.png';
-    img.alt = '';
-    img.width = 70; img.height = 45;
     const gorro = document.createElement('span');
     gorro.className = 'nv-gorro';
+    img.replaceWith(caja);
     caja.append(img, gorro, lucesLogo());
-    mark.replaceWith(caja);
   }
 }
 
