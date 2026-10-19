@@ -195,6 +195,23 @@ function syncCart() {
   saveCart();
 }
 
+// Meta Pixel (pixel.js): eventos de la tienda para los anuncios. Solo productos y montos,
+// nunca datos del cliente. Si el pixel no cargó (bloqueador de anuncios), no pasa nada.
+function pixel(evento, lines, cur = currency.value) {
+  if (typeof window.fbq !== 'function') return;
+  const precio = hasPrice(lines[0][0], cur) ? cur : 'precio';
+  try {
+    window.fbq('track', evento, {
+      content_ids: lines.map(([it]) => it.codigo),
+      contents: lines.map(([it, n]) => ({ id: it.codigo, quantity: n })),
+      content_type: 'product',
+      num_items: lines.reduce((s, [, n]) => s + n, 0),
+      value: Math.round(orderTotal(lines, precio) * 100) / 100,
+      currency: CURRENCY_CODES[precio],
+    });
+  } catch {}
+}
+
 let toastTimer = 0;
 function toast(text, action) {
   const box = $('toast');
@@ -211,6 +228,7 @@ function addToCart(item, from) {
   const now = setQty(item, before + 1);
   if (now === before) toast(`Ya tienes todas las unidades disponibles (${number.format(item.disponible)})`, ['Ver carrito', '#/carrito']);
   else {
+    pixel('AddToCart', [[item, 1]]);
     volarAlCarrito(from);
     toast(`Agregado: ${item.nombre}`, ['Ver carrito', '#/carrito']);
   }
@@ -380,6 +398,7 @@ function carouselSection(title, cards, subtitle) {
 /* ---------- Detalle ---------- */
 
 function showDetail(item) {
+  pixel('ViewContent', [[item, 1]]);
   photoInto($('detail-photo'), item);
   promoBadge($('detail-photo'), item);
   $('detail-brand').textContent = [brandKey(item) && brandName(brandKey(item)), categoryOf(item)].filter(Boolean).join(' · ');
@@ -1369,6 +1388,8 @@ function checkoutForm() {
     };
     try { localStorage.setItem('cliente', JSON.stringify({ nombre: cli.nombre, apellido: cli.apellido, telefono: cli.telefono, cedula: cli.cedula })); } catch {}
     if (online) return sendOrder(datos);
+    const enviados = orderLines();
+    if (enviados.length) pixel('Lead', enviados);
     const text = orderText(datos);
     if (CONTACT.whatsapp) window.open(waLink(text), '_blank', 'noopener');
     else copyText(submit, text, label);
@@ -1398,6 +1419,7 @@ function checkoutForm() {
       data = await res.json().catch(() => null);
     } catch {}
     if (res?.status === 201 && data?.numero) {
+      if (lines.length) pixel('Purchase', lines, cur);
       order.clear();
       saveCart();
       $('toast').hidden = true;
