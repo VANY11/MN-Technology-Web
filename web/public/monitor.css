@@ -98,8 +98,9 @@ body[data-estado="lento"] .m-top::before { background: var(--lento); }
 body[data-estado="caido"] .m-top::before { background: var(--caido); }
 .m-top-inner { max-width: 1240px; margin: 0 auto; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
 .m-brand { display: flex; gap: 12px; align-items: center; }
-.m-mark { width: 42px; height: 42px; border-radius: 13px; background: var(--gradient); display: grid; place-items: center; flex: none; box-shadow: 0 10px 24px -12px rgb(124 58 237 / .7); }
-.m-mark svg { width: 24px; }
+/* El mismo monograma MN del encabezado de la tienda. */
+.m-logo { display: block; flex: none; width: 62px; height: 40px; object-fit: contain; }
+@media (max-width: 560px) { .m-logo { width: 50px; height: 32px; } }
 .m-brand h1 { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
 .m-sub { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13.5px; }
 .m-estado-punto { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
