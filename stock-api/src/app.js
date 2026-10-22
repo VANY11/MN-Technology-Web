@@ -1,6 +1,9 @@
-import { STOCK_SQL, PHOTO_SQL, PROMOS_SQL, CATS_SQL, toPublicItem, toPublicPromo, toPublicCat, localPhotoPath } from './query.js';
+import {
+  STOCK_SQL, PHOTO_SQL, PROMOS_SQL, CATS_SQL, NUEVOS_SQL, toPublicItem, toPublicPromo, toPublicCat, toPublicNuevo, localPhotoPath,
+} from './query.js';
 
-// Sin la vista (MN Tech aún sin ese cambio) o sin permiso sobre ella: lista vacía (promociones, orden de categorías).
+// Sin la vista (MN Tech aún sin ese cambio) o sin permiso sobre ella: lista vacía (promociones, orden de categorías,
+// productos nuevos).
 const SIN_PROMOS = new Set(['42P01', '42501']);
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -90,6 +93,17 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
         if (SIN_PROMOS.has(err.code)) return send(res, 200, []);
         log.error('Error leyendo el orden de categorías:', err.message);
         return send(res, 503, { error: 'Categorías no disponibles' });
+      }
+    }
+
+    if (pathname === '/nuevos') {
+      try {
+        const { rows } = await query(NUEVOS_SQL);
+        return send(res, 200, rows.map(toPublicNuevo).filter(Boolean));
+      } catch (err) {
+        if (SIN_PROMOS.has(err.code)) return send(res, 200, []);
+        log.error('Error leyendo los productos nuevos:', err.message);
+        return send(res, 503, { error: 'Productos nuevos no disponibles' });
       }
     }
 

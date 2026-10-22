@@ -148,3 +148,19 @@ export function toPublicCat(row) {
     vendidas: Number.isFinite(vendidas) && vendidas > 0 ? Math.round(vendidas) : 0,
   };
 }
+
+// Productos nuevos (decisión de Yvan del 2026-10-22, «fecha + reposiciones»): los creados en MN Tech en los últimos 30
+// días o a los que les entró mercancía en ese plazo. Solo se lee la vista web_productos_nuevos (código, desde cuándo y
+// el motivo); el rol mnstock tiene SELECT sobre la vista, nunca sobre el historial del inventario.
+export const NUEVOS_SQL = `
+  SELECT v.code, v.nuevo_desde, v.motivo
+  FROM web_productos_nuevos v
+  ORDER BY v.nuevo_desde DESC
+`;
+
+export function toPublicNuevo(row) {
+  const codigo = text(row.code, 64);
+  const desde = row.nuevo_desde instanceof Date ? row.nuevo_desde : new Date(row.nuevo_desde);
+  if (!codigo || Number.isNaN(desde.getTime())) return null;
+  return { codigo, desde: desde.toISOString(), motivo: row.motivo === 'reposicion' ? 'reposicion' : 'nuevo' };
+}

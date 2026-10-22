@@ -181,3 +181,32 @@ test('sin la vista de orden de categorías responde una lista vacía; otro error
   await withServer(fail('42P01'), async (base) => assert.deepEqual(await (await fetch(`${base}/categorias`)).json(), []));
   await withServer(fail('57014'), async (base) => assert.equal((await fetch(`${base}/categorias`)).status, 503));
 });
+
+test('GET /nuevos lee solo la vista de productos nuevos y manda código, desde y motivo', async () => {
+  let sql = '';
+  const query = async (q) => {
+    sql = q;
+    return { rows: [
+      { code: ' MN-0730 ', nuevo_desde: new Date('2026-10-20T14:00:00Z'), motivo: 'nuevo' },
+      { code: 'FOR-1', nuevo_desde: '2026-10-10T09:30:00Z', motivo: 'reposicion' },
+      { code: 'X', nuevo_desde: 'no es fecha', motivo: 'nuevo' },
+      { code: ' ', nuevo_desde: new Date(), motivo: 'nuevo' },
+    ] };
+  };
+  await withServer(query, async (base) => {
+    const body = await (await fetch(`${base}/nuevos`)).json();
+    assert.match(sql, /FROM web_productos_nuevos v/);
+    assert.doesNotMatch(sql, /mnstore_inventory_movements/);
+    assert.deepEqual(body, [
+      { codigo: 'MN-0730', desde: '2026-10-20T14:00:00.000Z', motivo: 'nuevo' },
+      { codigo: 'FOR-1', desde: '2026-10-10T09:30:00.000Z', motivo: 'reposicion' },
+    ]);
+  });
+});
+
+test('sin la vista de productos nuevos responde una lista vacía; otro error, 503', async () => {
+  const fail = (code) => async () => { throw Object.assign(new Error('x'), { code }); };
+  await withServer(fail('42P01'), async (base) => assert.deepEqual(await (await fetch(`${base}/nuevos`)).json(), []));
+  await withServer(fail('42501'), async (base) => assert.deepEqual(await (await fetch(`${base}/nuevos`)).json(), []));
+  await withServer(fail('57014'), async (base) => assert.equal((await fetch(`${base}/nuevos`)).status, 503));
+});

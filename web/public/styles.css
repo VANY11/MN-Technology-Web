@@ -839,3 +839,39 @@ a.mini-btn { text-decoration: none; }
 @media (max-width: 640px) { .tema-btn { width: 40px; height: 40px; } }
 /* Celular angosto: con el botón de tema la fila no cabe; queda el monograma MN como marca. */
 @media (max-width: 440px) { .brand-text { display: none; } }
+
+/* ---------- Productos nuevos (banner del inicio y etiqueta «Nuevo») ---------- */
+.new-badge { position: absolute; top: 8px; right: 8px; z-index: 1; padding: 4px 9px; border-radius: 8px; background: var(--gradient); color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .02em; box-shadow: var(--glow); white-space: nowrap; }
+.detail-photo .new-badge, .sc-photo .new-badge { top: 16px; right: 16px; font-size: 14px; padding: 6px 12px; border-radius: 10px; }
+.mini-photo .new-badge { top: auto; bottom: 4px; right: 4px; padding: 2px 6px; font-size: 10px; border-radius: 6px; }
+
+.nuevos-sec { padding-top: 26px; }
+.nuevos-banner { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px clamp(20px, 4vw, 44px); border-radius: 24px; overflow: hidden; color: #fff; text-decoration: none; background: var(--gradient); box-shadow: var(--glow), var(--shadow); isolation: isolate; transition: transform .2s ease, box-shadow .2s ease; }
+.nuevos-banner::before { content: ""; position: absolute; inset: -40% -10% auto auto; width: 60%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgb(255 255 255 / 0.28), transparent 65%); z-index: -1; }
+.nuevos-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.22) 45%, transparent 60%); transform: translateX(-100%); animation: nb-brillo 4.5s ease-in-out infinite; z-index: -1; }
+.nuevos-banner:hover { transform: translateY(-2px); }
+.nuevos-banner:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.nb-text { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.nb-kicker { padding: 4px 10px; border-radius: 999px; background: rgb(255 255 255 / 0.2); font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.section .nb-title, .nb-title { margin: 0; font-size: clamp(30px, 5vw, 46px); font-weight: 900; letter-spacing: -0.03em; line-height: 1.05; color: #fff; }
+.nb-sub { margin: 0 0 8px; font-size: 16px; opacity: .92; }
+.nb-btn { background: #fff; color: #5b21b6; border-color: #fff; font-weight: 800; }
+.nuevos-banner:hover .nb-btn { background: #f5f3ff; }
+.nb-fotos { display: flex; flex-shrink: 0; }
+.nb-foto { position: relative; width: clamp(64px, 9vw, 104px); aspect-ratio: 1; margin-left: -18px; border-radius: 50%; background: var(--foto-fondo); border: 3px solid rgb(255 255 255 / 0.85); box-shadow: 0 12px 24px -12px rgb(0 0 0 / 0.5); display: grid; place-items: center; overflow: hidden; animation: nb-flota 5s ease-in-out infinite; }
+.nb-foto:nth-child(2) { animation-delay: -1.2s; }
+.nb-foto:nth-child(3) { animation-delay: -2.4s; }
+.nb-foto:nth-child(4) { animation-delay: -3.6s; }
+.nb-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 10%; }
+.nb-foto .placeholder { width: 46%; height: 46%; stroke: #8b5cf6; color: #8b5cf6; }
+@keyframes nb-brillo { 0%, 55% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes nb-flota { 50% { transform: translateY(-6px); } }
+@media (max-width: 640px) {
+  .nuevos-banner { flex-direction: column; align-items: stretch; gap: 18px; padding: 22px 20px; }
+  .nb-fotos { order: -1; justify-content: center; padding-left: 18px; }
+  .nb-btn { justify-self: stretch; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nuevos-banner, .nuevos-banner::after, .nb-foto { animation: none; transition: none; }
+  .nuevos-banner:hover { transform: none; }
+}
