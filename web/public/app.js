@@ -37,6 +37,8 @@ let items = [];
 let promos = [];
 // Orden de las categorías que Yvan arma en MN Tech: nombre → { orden (fijada) | null, vendidas en 30 días }.
 let ordenCats = new Map();
+// Productos nuevos (MN Tech: creados o con mercancía que entró en los últimos 30 días): código → { desde, motivo }.
+let nuevos = new Map();
 let loadError = false;
 let pedidosOnline = false; // la web guarda el pedido en el sistema MN Tech (GET /api/pedido)
 // Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
@@ -95,9 +97,11 @@ const wasText = (item, key = currency.value) => {
   const value = item.antes?.[key];
   return value === null || value === undefined ? null : FORMATS[key].format(value);
 };
+// Etiquetas sobre la foto: la de la promoción (izquierda) y «Nuevo» (derecha).
 function promoBadge(box, item) {
   const tag = etiquetaPromo(item);
   if (tag) box.append(el('span', 'promo-badge', tag));
+  if (item.nuevo) box.append(el('span', 'new-badge', 'Nuevo'));
 }
 const plural = (n, one, many) => `${number.format(n)} ${n === 1 ? one : many}`;
 const waLink = (text) => `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(text)}`;
@@ -851,6 +855,33 @@ function searchHero() {
   return sec;
 }
 
+// Banner «Productos nuevos» (debajo del buscador): cuántos llegaron este mes y las fotos de los más recientes. Lleva al
+// catálogo con solo esos productos. Sin productos nuevos no se muestra.
+function nuevosBanner() {
+  const list = items.filter((it) => it.nuevo && it.disponible > 0).sort(SORTS.nuevos);
+  if (!list.length) return null;
+  const sec = el('section', 'section wrap nuevos-sec');
+  const a = link(productsHref({ nuevos: '1' }), 'nuevos-banner');
+  a.setAttribute('aria-label', `Productos nuevos: ${plural(list.length, 'producto recién llegado', 'productos recién llegados')}`);
+  const text = el('div', 'nb-text');
+  text.append(
+    el('span', 'nb-kicker', '¡Recién llegados!'),
+    el('h2', 'nb-title', 'Productos nuevos'),
+    el('p', 'nb-sub', `${plural(list.length, 'producto nuevo o de vuelta', 'productos nuevos o de vuelta')} en los últimos 30 días.`),
+    withIcon(el('span', 'btn nb-btn', 'Ver novedades'), 'arrow', true),
+  );
+  const fotos = el('div', 'nb-fotos');
+  fotos.setAttribute('aria-hidden', 'true');
+  for (const it of [...list.filter((x) => safePhoto(x.foto)), ...list.filter((x) => !safePhoto(x.foto))].slice(0, 4)) {
+    const f = el('span', 'nb-foto');
+    photoInto(f, it);
+    fotos.append(f);
+  }
+  a.append(text, fotos);
+  sec.append(a);
+  return sec;
+}
+
 function pageHome() {
   const frag = document.createDocumentFragment();
   const catCounts = countBy(items, (it) => it.categoria);
@@ -860,6 +891,9 @@ function pageHome() {
   frag.append(showcase());
 
   frag.append(searchHero());
+
+  const banner = nuevosBanner();
+  if (banner) frag.append(banner);
 
   // Categorías justo debajo del buscador, en el orden de MN Tech.
   const catSec = el('section', 'section wrap home-cats');
@@ -911,6 +945,7 @@ const SORTS = {
   'precio-asc': (a, b) => (a.precio ?? Infinity) - (b.precio ?? Infinity),
   'precio-desc': (a, b) => (b.precio ?? -Infinity) - (a.precio ?? -Infinity),
   stock: (a, b) => b.disponible - a.disponible,
+  nuevos: (a, b) => (b.nuevo?.desde || '').localeCompare(a.nuevo?.desde || '') || a.nombre.localeCompare(b.nombre, 'es'),
 };
 
 let lastProductsKey = '';
@@ -949,12 +984,17 @@ function pageProducts(params) {
   const category = params.get('categoria') || '';
   const brand = params.get('marca') || '';
   const term = params.get('q') || '';
+  const soloNuevos = params.get('nuevos') === '1';
+  const nv = soloNuevos ? '1' : '';
   const mundo = category ? null : MUNDOS.find((m) => m.id === params.get('mundo')) || null;
   // Al cambiar de categoría o marca se reinician los filtros finos y la paginación.
-  const key = `${category}|${brand}|${term}|${mundo?.id || ''}`;
+  const key = `${category}|${brand}|${term}|${mundo?.id || ''}|${nv}`;
   if (key !== lastProductsKey) {
     specFilters = new Map();
     limit = PAGE;
+    // En «Productos nuevos», lo más reciente primero.
+    if (soloNuevos && !lastProductsKey.endsWith('|1')) sortBy = 'nuevos';
+    else if (!soloNuevos && sortBy === 'nuevos') sortBy = 'nombre';
     lastProductsKey = key;
   }
   if (q.value !== term && document.activeElement !== q) q.value = term;
@@ -967,14 +1007,15 @@ function pageProducts(params) {
   const head = el('div', 'shop-head');
   const titles = el('div');
   const count = el('p', 'muted');
-  titles.append(el('h1', null, category || (brand ? brandName(brand) : mundo ? mundo.nombre : 'Productos')), count);
+  const titulo = category || (brand ? brandName(brand) : mundo ? mundo.nombre : 'Productos');
+  titles.append(el('h1', null, soloNuevos ? (titulo === 'Productos' ? 'Productos nuevos' : `${titulo}: nuevos`) : titulo), count);
   const tools = el('div', 'shop-tools');
   const filterBtn = withIcon(el('button', 'btn btn-outline filters-toggle', 'Filtros'), 'filter');
   filterBtn.type = 'button';
   filterBtn.addEventListener('click', () => side.classList.toggle('open'));
   const sort = el('select');
   sort.setAttribute('aria-label', 'Ordenar');
-  for (const [v, t] of [['nombre', 'Nombre (A–Z)'], ['precio-asc', 'Precio: menor a mayor'], ['precio-desc', 'Precio: mayor a menor'], ['stock', 'Más disponibles']]) {
+  for (const [v, t] of [['nombre', 'Nombre (A–Z)'], ['nuevos', 'Más recientes'], ['precio-asc', 'Precio: menor a mayor'], ['precio-desc', 'Precio: mayor a menor'], ['stock', 'Más disponibles']]) {
     const o = el('option', null, t);
     o.value = v;
     sort.append(o);
@@ -996,6 +1037,7 @@ function pageProducts(params) {
   function draw() {
     const scores = new Map();
     const searched = items.filter((it) => {
+      if (soloNuevos && !it.nuevo) return false;
       if (mundo && mundoDe(it) !== mundo) return false;
       if (!term.trim()) return true;
       const p = relevancia(it, term);
@@ -1010,7 +1052,7 @@ function pageProducts(params) {
 
     const sideHead = el('div', 'fhead');
     sideHead.append(withIcon(el('strong', null, 'Filtros'), 'filter'));
-    if (category || brand || mundo || [...specFilters.values()].some((v) => v.size)) {
+    if (category || brand || mundo || soloNuevos || [...specFilters.values()].some((v) => v.size)) {
       const clear = el('button', 'link-more', 'Limpiar');
       clear.type = 'button';
       clear.addEventListener('click', () => { specFilters = new Map(); go('productos', { q: term }); });
@@ -1021,13 +1063,20 @@ function pageProducts(params) {
       ['', 'Todas', searched.length, 'grid'],
       ...categoriasEnOrden(catCounts).map((c) => [c, c, catCounts.get(c), c === OTHERS ? 'box' : iconFor(c)]),
     ];
-    const groups = [sideHead, filterGroup('Categorías', catEntries, (v) => v === category, (v) => go('productos', { categoria: v, q: term }))];
+    const groups = [sideHead];
+    // «Solo productos nuevos»: se prende y apaga sin perder la categoría, la marca ni la búsqueda.
+    const cuantosNuevos = items.filter((it) => it.nuevo).length;
+    if (cuantosNuevos || soloNuevos) {
+      groups.push(filterGroup('Novedades', [['1', 'Productos nuevos', cuantosNuevos, 'tag']], () => soloNuevos,
+        () => go('productos', { categoria: category, marca: brand, mundo: mundo?.id, q: term, nuevos: soloNuevos ? '' : '1' })));
+    }
+    groups.push(filterGroup('Categorías', catEntries, (v) => v === category, (v) => go('productos', { categoria: v, q: term, nuevos: nv })));
     // Marcas y demás filtros solo después de elegir una categoría (y según ella).
     const brandCounts = countBy(inCategory, brandKey);
     if ((category || brand) && brandCounts.size) {
       const entries = byCountDesc(brandCounts).map((k) => [k, brandName(k), brandCounts.get(k)]);
       groups.push(
-        filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, mundo: mundo?.id, q: term }), 10),
+        filterGroup('Marca', entries, (v) => v === brand, (v) => go('productos', { categoria: category, marca: v === brand ? '' : v, mundo: mundo?.id, q: term, nuevos: nv }), 10),
       );
     }
     // Filtros por especificación: los campos de la categoría con al menos dos valores distintos.
@@ -1065,7 +1114,7 @@ function pageProducts(params) {
     more.textContent = `Ver más productos (${number.format(shown.length - limit)})`;
     if (loadError) status.textContent = 'No pudimos cargar el catálogo en este momento. Intenta de nuevo en unos minutos.';
     else if (!items.length) status.textContent = 'Cargando catálogo…';
-    else if (!shown.length) status.textContent = 'No encontramos productos con esos filtros.';
+    else if (!shown.length) status.textContent = soloNuevos && !items.some((it) => it.nuevo) ? 'Este mes todavía no llegaron productos nuevos. Mira el catálogo completo.' : 'No encontramos productos con esos filtros.';
     else status.textContent = '';
   }
 
@@ -1867,6 +1916,14 @@ async function load() {
         .map((c) => [c.nombre, { orden: Number.isInteger(c.orden) ? c.orden : null, vendidas: Number(c.vendidas) || 0 }]));
     })
     .catch(() => {});
+  const cargaNuevos = fetch('/api/nuevos', { headers: { Accept: 'application/json' } })
+    .then((r) => (r.ok ? r.json() : []))
+    .then((d) => {
+      nuevos = new Map((Array.isArray(d) ? d : [])
+        .filter((n) => n && typeof n.codigo === 'string' && typeof n.desde === 'string')
+        .map((n) => [n.codigo, { desde: n.desde, motivo: n.motivo === 'reposicion' ? 'reposicion' : 'nuevo' }]));
+    })
+    .catch(() => {});
   try {
     const res = await fetch('/api/stock', { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(String(res.status));
@@ -1874,8 +1931,9 @@ async function load() {
   } catch {
     loadError = true;
   }
-  await Promise.all([estadoPedidos, cargaPromos, cargaOrden]);
+  await Promise.all([estadoPedidos, cargaPromos, cargaOrden, cargaNuevos]);
   aplicarPromos(items, promos);
+  for (const it of items) if (nuevos.has(it.codigo)) it.nuevo = nuevos.get(it.codigo);
   buildBrandNames();
   if (!loadError) syncCart();
   fillFooter();

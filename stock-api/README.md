@@ -41,6 +41,10 @@ web), leídas solo de la vista `web_promociones_vigentes` (la migración de MN T
 (ninguno, porcentaje o precio), `porcentaje`, `precio_oferta` (USD, solo productos) y `lugares` (vitrina, destacados y/o nuevos; si la vista aún no los tiene, vitrina y destacados). Mientras MN Tech no
 tenga la vista, responde `[]`. En la web, `/api/promociones` la trae por el túnel con 60 s de caché.
 
+`GET /nuevos` devuelve los productos nuevos: los creados en MN Tech en los últimos 30 días o con una entrada de
+mercancía en ese plazo, leídos solo de la vista `web_productos_nuevos` (migración 20261113_01 de MN Tech): `codigo`,
+`desde` (ISO) y `motivo` (nuevo o reposicion). Sin la vista responde `[]`. En la web, `/api/nuevos` con 5 min de caché.
+
 `GET /health` responde `{"ok": true}`. Cualquier otro método da 405.
 
 ## Instalación en el servidor (Ubuntu)
@@ -77,6 +81,7 @@ cd /opt/mn-stock-api && sudo npm ci --omit=dev
 sudo systemctl restart mn-stock-api
 curl http://127.0.0.1:8080/promociones
 curl http://127.0.0.1:8080/categorias
+curl http://127.0.0.1:8080/nuevos
 ```
 
 La conexión a PostgreSQL usa el socket local con autenticación `peer`, que es la configuración
