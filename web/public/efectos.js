@@ -217,10 +217,57 @@ function prepararAparicion(app) {
   vigilar(app);
 }
 
+/* ---------- Íconos «Burbuja 3D» y transiciones entre páginas ---------- */
+
+// Al pasar el mouse (o tocar) un botón o tarjeta, su ícono da un saltito.
+function saltoIcono(e) {
+  if (quieto.matches) return;
+  const caja = e.target instanceof Element ? e.target.closest('.tile, .chip, .fitem, .nav a, .cart-btn, .tema-btn, .btn, .mini-btn') : null;
+  if (!caja || caja.contains(e.relatedTarget)) return;
+  for (const svg of caja.querySelectorAll('svg')) {
+    svg.classList.remove('fx-salta');
+    void svg.getBoundingClientRect();
+    svg.classList.add('fx-salta');
+  }
+}
+
+// Pastilla de la navegación que se desliza hasta la sección activa (solo en computadora, ver styles.css).
+function moverPastilla() {
+  const nav = document.getElementById('nav');
+  const act = nav?.querySelector('a[aria-current="page"]');
+  if (!nav) return;
+  nav.style.setProperty('--p-x', act ? `${act.offsetLeft}px` : '0px');
+  nav.style.setProperty('--p-w', act ? `${act.offsetWidth}px` : '0px');
+}
+
+// Al cambiar de página, la nueva se abre en un círculo desde donde se tocó (View Transitions API).
+// Filtrar o buscar dentro de la misma página no la activa. Sin soporte del navegador, cambia como siempre.
+const paginaDe = (h) => h.replace(/^#\/?/, '').split('?')[0] || 'inicio';
+function transicion(e) {
+  const a = e.target instanceof Element ? e.target.closest('a[href^="#/"]') : null;
+  if (!a || !document.startViewTransition || quieto.matches || e.defaultPrevented) return;
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const destino = a.getAttribute('href');
+  if (paginaDe(destino) === paginaDe(location.hash)) return;
+  e.preventDefault();
+  const raiz = document.documentElement;
+  raiz.style.setProperty('--vt-x', `${e.clientX}px`);
+  raiz.style.setProperty('--vt-y', `${e.clientY}px`);
+  document.startViewTransition(() => new Promise((listo) => {
+    addEventListener('hashchange', () => listo(), { once: true });
+    location.hash = destino;
+  }));
+}
+
 export function iniciarEfectos(app) {
   document.addEventListener('pointermove', moverLuz, { passive: true });
   document.addEventListener('pointerout', soltarLuz, { passive: true });
   document.addEventListener('pointerdown', chispas, { passive: true });
   prepararAparicion(app);
   prepararChispitas();
+  document.addEventListener('pointerover', saltoIcono, { passive: true });
+  document.addEventListener('click', transicion);
+  addEventListener('hashchange', () => requestAnimationFrame(moverPastilla));
+  addEventListener('resize', moverPastilla);
+  requestAnimationFrame(moverPastilla);
 }
