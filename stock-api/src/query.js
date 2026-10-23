@@ -164,3 +164,26 @@ export function toPublicNuevo(row) {
   if (!codigo || Number.isNaN(desde.getTime())) return null;
   return { codigo, desde: desde.toISOString(), motivo: row.motivo === 'reposicion' ? 'reposicion' : 'nuevo' };
 }
+
+// Colores por serial: en MN Tech los teléfonos guardan el color en cada serial/IMEI, no en el producto. Solo se lee la
+// vista web_colores_disponibles (código, color y cuántas unidades libres hay de ese color); el rol mnstock tiene SELECT
+// sobre la vista, nunca sobre mnstore_serials, así que ningún IMEI sale de la base.
+export const COLORES_SQL = `
+  SELECT v.code, v.color, v.disponible
+  FROM web_colores_disponibles v
+  ORDER BY v.code, v.color
+`;
+
+// Mapa código → [{ color, disponible }] con los colores que tienen al menos una unidad.
+export function coloresPorCodigo(rows) {
+  const out = new Map();
+  for (const row of rows) {
+    const codigo = text(row.code, 64);
+    const color = text(row.color, 50);
+    const disponible = Math.floor(Number(row.disponible) || 0);
+    if (!codigo || !color || disponible < 1) continue;
+    if (!out.has(codigo)) out.set(codigo, []);
+    out.get(codigo).push({ color, disponible });
+  }
+  return out;
+}

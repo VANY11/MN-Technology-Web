@@ -8,7 +8,7 @@ const env = {
   CF_ACCESS_CLIENT_ID: 'id.access',
   CF_ACCESS_CLIENT_SECRET: 'secreto',
 };
-const body = { nombre: 'Ana', apellido: 'Pérez', cedula: 'v-12.345.678', telefono: '0412 123 4567', moneda: 'VES', items: [{ codigo: 'T001', cantidad: 2 }], precio: 1 };
+const body = { nombre: 'Ana', apellido: 'Pérez', cedula: 'v-12.345.678', telefono: '0412 123 4567', moneda: 'VES', items: [{ codigo: 'T001', cantidad: 2 }, { codigo: 'MN-0640', cantidad: 1, color: ' Azul ' }, { codigo: 'X', cantidad: 1, color: '' }], precio: 1 };
 const req = (b = body, headers = {}) =>
   new Request('https://mntechve.com/api/pedido', {
     method: 'POST',
@@ -46,7 +46,7 @@ test('reenvía el pedido con los tokens y solo los campos permitidos', async () 
   assert.equal(sent.apellido, undefined);
   assert.equal(sent.cedula, 'V12345678');
   assert.equal(sent.telefono, '0412-1234567');
-  assert.deepEqual(sent.items, [{ codigo: 'T001', cantidad: 2 }]);
+  assert.deepEqual(sent.items, [{ codigo: 'T001', cantidad: 2 }, { codigo: 'MN-0640', cantidad: 1, color: 'Azul' }, { codigo: 'X', cantidad: 1 }]);
   assert.equal(sent.moneda, 'USD'); // aunque llegue VES: la tienda vende solo en dólares
 });
 

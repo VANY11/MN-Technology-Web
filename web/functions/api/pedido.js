@@ -65,7 +65,12 @@ export async function onRequestPost({ env, request }) {
   if (!Array.isArray(body.items) || !body.items.length || body.items.length > 50) {
     return json({ error: 'El pedido no tiene productos' }, 400);
   }
-  pedido.items = body.items.map((it) => ({ codigo: String(it?.codigo ?? '').slice(0, 60), cantidad: Number(it?.cantidad) }));
+  // color: el que el cliente eligió en un teléfono (colores por serial); MN Tech lo valida contra sus seriales libres.
+  pedido.items = body.items.map((it) => {
+    const linea = { codigo: String(it?.codigo ?? '').slice(0, 60), cantidad: Number(it?.cantidad) };
+    if (typeof it?.color === 'string' && it.color.trim()) linea.color = it.color.trim().slice(0, 50);
+    return linea;
+  });
 
   let upstream;
   try {

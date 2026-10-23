@@ -1,9 +1,9 @@
 import {
-  STOCK_SQL, PHOTO_SQL, PROMOS_SQL, CATS_SQL, NUEVOS_SQL, toPublicItem, toPublicPromo, toPublicCat, toPublicNuevo, localPhotoPath,
+  STOCK_SQL, PHOTO_SQL, PROMOS_SQL, CATS_SQL, NUEVOS_SQL, COLORES_SQL, coloresPorCodigo, toPublicItem, toPublicPromo, toPublicCat, toPublicNuevo, localPhotoPath,
 } from './query.js';
 
 // Sin la vista (MN Tech aún sin ese cambio) o sin permiso sobre ella: lista vacía (promociones, orden de categorías,
-// productos nuevos).
+// productos nuevos, colores por serial).
 const SIN_PROMOS = new Set(['42P01', '42501']);
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -67,7 +67,17 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
     if (pathname === '/stock') {
       try {
         const { rows } = await query(STOCK_SQL);
-        return send(res, 200, rows.map(toPublicItem));
+        const items = rows.map(toPublicItem);
+        // Colores de los seriales (teléfonos). Si la vista falla, el stock sale igual, sin ellos.
+        if (items.length) {
+          try {
+            const colores = coloresPorCodigo((await query(COLORES_SQL)).rows);
+            for (const it of items) if (colores.has(it.codigo)) it.colores = colores.get(it.codigo);
+          } catch (err) {
+            if (!SIN_PROMOS.has(err.code)) log.error('Error leyendo los colores:', err.message);
+          }
+        }
+        return send(res, 200, items);
       } catch (err) {
         log.error('Error leyendo el stock:', err.message);
         return send(res, 503, { error: 'Stock no disponible' });
