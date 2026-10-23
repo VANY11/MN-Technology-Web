@@ -270,6 +270,8 @@ main > .section:last-child, #app > .section:last-child { padding-bottom: 64px; }
 .color-opt:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .cart-color { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .cart-color .swatch { width: 12px; height: 12px; }
+.color-opt .opt-n { min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.pick-hint { color: var(--brand-ink); font-weight: 700; }
 
 /* ---------- Detalle ---------- */
 .detail { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.5); }

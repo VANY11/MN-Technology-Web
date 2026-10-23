@@ -36,13 +36,18 @@ let ordenCats = new Map();
 // Productos nuevos (MN Tech: creados o con mercancía que entró en los últimos 30 días): código → { desde, motivo }.
 let nuevos = new Map();
 let variantes = new Map(); // producto → sus versiones en otros colores (colores.js)
+// Teléfonos: MN Tech guarda el color en cada serial, no en el producto. La API manda `colores` ([{ color, disponible }])
+// y aquí cada color es una «variante» del producto, con su clave en el carrito (código|color).
+let porClave = new Map(); // clave del carrito → producto o variante
+const claveDe = (it) => it.clave || it.codigo;
+const deSerial = (item) => (Array.isArray(item.variantesSerial) && item.variantesSerial.length ? item.variantesSerial : null);
 let loadError = false;
 let pedidosOnline = false; // la web guarda el pedido en el sistema MN Tech (GET /api/pedido)
 // Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
 let specFilters = new Map();
 let sortBy = 'nombre';
 let limit = PAGE;
-// Carrito: código → cantidad. Vive solo en este navegador; el pedido se envía por WhatsApp.
+// Carrito: clave (código, o código|color en los teléfonos) → cantidad. Vive solo en este navegador; el pedido se envía por WhatsApp.
 const order = new Map();
 const PEDIDOS = STORE.pedidos || {};
 
@@ -83,8 +88,9 @@ const specList = (item) => (Array.isArray(item.especificaciones) ? item.especifi
 const specsSinColor = (item) => specList(item).filter((s) => !esCampoColor(s.campo));
 // Para los filtros del catálogo el color cuenta como una especificación más.
 const specsFiltro = (item) => {
-  const c = colorDe(item);
-  return c ? [...specsSinColor(item), { campo: 'Color', valor: c }] : specsSinColor(item);
+  const serial = deSerial(item);
+  const colores = serial ? serial.map((v) => v.color) : [colorDe(item)].filter(Boolean);
+  return [...specsSinColor(item), ...colores.map((valor) => ({ campo: 'Color', valor }))];
 };
 const safePhoto = (url) =>
   typeof url === 'string' && (url.startsWith('https://') || url.startsWith('/api/foto/')) ? url : null;
@@ -184,6 +190,16 @@ function swatch(color, className = 'swatch') {
 
 // Línea de color de la tarjeta: su color y, si viene en otros, los puntos de esos colores.
 function colorLine(item) {
+  const serial = deSerial(item);
+  if (serial) {
+    const p = el('p', 'color-line');
+    const dots = el('span', 'swatches');
+    for (const v of serial.slice(0, 5)) dots.append(swatch(v.color));
+    if (serial.length > 5) dots.append(el('span', 'swatch-more', `+${serial.length - 5}`));
+    p.append(dots, el('span', null, serial.length === 1 ? serial[0].color : `${serial.length} colores`));
+    p.title = serial.map((v) => v.color).join(', ');
+    return p;
+  }
   const color = colorDe(item);
   if (!color) return null;
   const p = el('p', 'color-line');
@@ -234,17 +250,16 @@ function saveCart() {
 // Fija la cantidad de un producto sin pasar de lo disponible. Devuelve la cantidad que quedó.
 function setQty(item, n) {
   const v = Math.max(0, Math.min(item.disponible, Number.isFinite(n) ? Math.floor(n) : 0));
-  if (v) order.set(item.codigo, v);
-  else order.delete(item.codigo);
+  if (v) order.set(claveDe(item), v);
+  else order.delete(claveDe(item));
   saveCart();
   return v;
 }
 
 // Al llegar el catálogo: fuera lo que ya no está y ninguna cantidad por encima de lo disponible.
 function syncCart() {
-  const byCode = new Map(items.map((it) => [it.codigo, it]));
   for (const [code, n] of order) {
-    const it = byCode.get(code);
+    const it = porClave.get(code);
     if (!it) order.delete(code);
     else if (n > it.disponible) order.set(code, it.disponible);
   }
@@ -279,13 +294,18 @@ function toast(text, action) {
 
 // from: el botón que se pulsó, para que la foto vuele de ahí al carrito.
 function addToCart(item, from) {
-  const before = order.get(item.codigo) || 0;
+  // Un teléfono con varios colores: primero se elige el color en su ficha.
+  if (deSerial(item)) {
+    showDetail(item);
+    return;
+  }
+  const before = order.get(claveDe(item)) || 0;
   const now = setQty(item, before + 1);
   if (now === before) toast(`Ya tienes todas las unidades disponibles (${number.format(item.disponible)})`, ['Ver carrito', '#/carrito']);
   else {
     pixel('AddToCart', [[item, 1]]);
     volarAlCarrito(from);
-    toast(`Agregado: ${item.nombre}`, ['Ver carrito', '#/carrito']);
+    toast(`Agregado: ${item.nombre}${item.base ? ` (${item.color})` : ''}`, ['Ver carrito', '#/carrito']);
   }
 }
 
@@ -454,7 +474,9 @@ function carouselSection(title, cards, subtitle) {
 
 /* ---------- Detalle ---------- */
 
-function showDetail(item) {
+// elegido: el color con el que se abre la ficha de un teléfono (p. ej. desde una línea del carrito).
+function showDetail(item, elegido = null) {
+  if (item.base) return showDetail(item.base, item.color);
   pixel('ViewContent', [[item, 1]]);
   photoInto($('detail-photo'), item);
   promoBadge($('detail-photo'), item);
@@ -463,7 +485,9 @@ function showDetail(item) {
   $('detail-meta').textContent = [item.modelo && `Modelo ${item.modelo}`, item.ram && `RAM ${item.ram}`, item.almacenamiento]
     .filter(Boolean)
     .join(' · ');
-  detailColors(item);
+  const serial = deSerial(item);
+  // La variante elegida (teléfonos): si solo hay un color, ya está elegido.
+  let actual = serial ? serial.find((v) => v.color === elegido) || (serial.length === 1 ? serial[0] : null) : item;
   $('detail-spec-list').replaceChildren(
     ...specsSinColor(item).map((s) => {
       const div = el('div');
@@ -480,22 +504,34 @@ function showDetail(item) {
     rows.push(div);
   }
   $('detail-prices').replaceChildren(...(rows.length ? rows : [el('p', 'muted', 'Consulta el precio con nosotros.')]));
-  const [label, kind] = stockBadge(item.disponible);
   const stock = $('detail-stock');
-  stock.className = `badge ${kind}`;
-  stock.textContent = label;
   $('detail-code').textContent = item.codigo ? `Cód. ${item.codigo}` : '';
   const add = $('detail-add');
   const addLabel = () => {
-    const n = order.get(item.codigo) || 0;
+    const [label, kind] = stockBadge((actual || item).disponible);
+    stock.className = `badge ${kind}`;
+    stock.textContent = label;
+    if (!actual) {
+      add.textContent = 'Elige un color';
+      add.disabled = true;
+      return;
+    }
+    const n = order.get(claveDe(actual)) || 0;
     add.textContent = n ? `En el carrito: ${number.format(n)} · Agregar otro` : 'Agregar al carrito';
-    add.disabled = n >= item.disponible;
+    add.disabled = n >= actual.disponible;
     if (add.disabled) add.textContent = `En el carrito: ${number.format(n)} (todo lo disponible)`;
   };
+  if (serial) {
+    serialColors(serial, () => actual, (v) => { actual = v; addLabel(); });
+  } else detailColors(item);
   addLabel();
   add.onclick = () => {
-    const before = order.get(item.codigo) || 0;
-    if (setQty(item, before + 1) > before) celebrarEnFicha(add);
+    if (!actual) return;
+    const before = order.get(claveDe(actual)) || 0;
+    if (setQty(actual, before + 1) > before) {
+      pixel('AddToCart', [[actual, 1]]);
+      celebrarEnFicha(add);
+    }
     addLabel();
     if (parseRoute().page === 'carrito') render();
   };
@@ -507,6 +543,32 @@ function showDetail(item) {
   share.replaceChildren(withIcon(el('span', null, 'Compartir'), 'share'));
   share.onclick = () => shareProduct(item);
   if (typeof detail.showModal === 'function') detail.showModal();
+}
+
+// Teléfonos: un botón por color con sus unidades; el cliente elige uno antes de agregarlo al carrito.
+function serialColors(serial, getActual, onPick) {
+  const box = $('detail-colors');
+  box.hidden = false;
+  const head = el('p', 'detail-color-name');
+  const row = el('div', 'color-options');
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', 'Elige un color');
+  const pintar = () => {
+    const actual = getActual();
+    head.replaceChildren(el('span', 'muted', 'Color: '), actual ? el('strong', null, actual.color) : el('span', 'pick-hint', 'elige uno'));
+    for (const b of row.children) b.setAttribute('aria-pressed', String(b.dataset.color === actual?.color));
+  };
+  for (const v of serial) {
+    const b = el('button', 'color-opt');
+    b.type = 'button';
+    b.dataset.color = v.color;
+    b.setAttribute('aria-label', `Color ${v.color}, ${plural(v.disponible, 'disponible', 'disponibles')}`);
+    b.append(swatch(v.color), el('span', null, v.color), el('span', 'opt-n', number.format(v.disponible)));
+    b.addEventListener('click', () => { onPick(v); pintar(); });
+    row.append(b);
+  }
+  pintar();
+  box.replaceChildren(head, row);
 }
 
 // «Color: Negro» y, si el mismo producto viene en otros colores, un botón por color que cambia la ficha.
@@ -982,7 +1044,7 @@ function pageHome() {
 // Búsqueda tolerante a errores (buscar.js): el índice de cada producto se arma una vez.
 const indices = new WeakMap();
 const indiceDe = (it) => {
-  if (!indices.has(it)) indices.set(it, indice([it.nombre, it.marca, it.modelo, it.codigo, it.categoria, colorDe(it), ...specList(it).map((x) => x.valor)]));
+  if (!indices.has(it)) indices.set(it, indice([it.nombre, it.marca, it.modelo, it.codigo, it.categoria, colorDe(it), ...(deSerial(it) || []).map((v) => v.color), ...specList(it).map((x) => x.valor)]));
   return indices.get(it);
 };
 const relevancia = (it, term) => puntaje(indiceDe(it), term);
@@ -990,8 +1052,7 @@ const relevancia = (it, term) => puntaje(indiceDe(it), term);
 const matchesSpecs = (item) => {
   for (const [campo, valores] of specFilters) {
     if (!valores.size) continue;
-    const spec = specsFiltro(item).find((s) => s.campo === campo);
-    if (!spec || !valores.has(spec.valor)) return false;
+    if (!specsFiltro(item).some((s) => s.campo === campo && valores.has(s.valor))) return false;
   }
   return true;
 };
@@ -1181,8 +1242,7 @@ function pageProducts(params) {
 /* ---------- Pedido ---------- */
 
 function orderLines() {
-  const byCode = new Map(items.map((it) => [it.codigo, it]));
-  return [...order.entries()].map(([code, n]) => [byCode.get(code), n]).filter(([it, n]) => it && n > 0);
+  return [...order.entries()].map(([code, n]) => [porClave.get(code), n]).filter(([it, n]) => it && n > 0);
 }
 
 function orderTotal(lines, cur) {
@@ -1243,7 +1303,7 @@ function stepper(it, onChange) {
   input.max = String(it.disponible);
   input.inputMode = 'numeric';
   input.setAttribute('aria-label', `Cantidad de ${it.nombre}`);
-  input.value = String(order.get(it.codigo) || 0);
+  input.value = String(order.get(claveDe(it)) || 0);
   const plus = el('button');
   plus.type = 'button';
   plus.setAttribute('aria-label', `Agregar uno de ${it.nombre}`);
@@ -1320,7 +1380,7 @@ function pageCart() {
     const now = orderLines();
     if (now.length !== lines.length) return render();
     for (const [it, n] of now) {
-      const sub = subtotals.get(it.codigo);
+      const sub = subtotals.get(claveDe(it));
       if (sub) sub.textContent = hasPrice(it, cur) ? FORMATS[cur].format(it[cur] * n) : 'Por confirmar';
     }
     const qty = now.reduce((s, [, n]) => s + n, 0);
@@ -1352,7 +1412,7 @@ function pageCart() {
       el('span', 'cart-unit', hasPrice(it, cur) ? `${FORMATS[cur].format(it[cur])} c/u` : 'Precio por confirmar'),
     );
     const sub = el('strong', 'cart-sub');
-    subtotals.set(it.codigo, sub);
+    subtotals.set(claveDe(it), sub);
     const remove = el('button', 'icon-btn');
     remove.type = 'button';
     remove.setAttribute('aria-label', `Quitar ${it.nombre} del carrito`);
@@ -1573,7 +1633,7 @@ function checkoutForm() {
         body: JSON.stringify({
           nombre: datos.nombrePila, apellido: datos.apellido, telefono: datos.telefono, cedula: datos.cedula, entrega: datos.entrega, direccion: datos.direccion,
           pago: datos.pago, notas: datos.notas, moneda: 'USD', sitio: trap.value,
-          items: lines.map(([it, n]) => ({ codigo: it.codigo, cantidad: n })),
+          items: lines.map(([it, n]) => (it.base ? { codigo: it.codigo, cantidad: n, color: it.color } : { codigo: it.codigo, cantidad: n })),
         }),
       });
       data = await res.json().catch(() => null);
@@ -1999,6 +2059,16 @@ async function load() {
   for (const it of items) if (nuevos.has(it.codigo)) it.nuevo = nuevos.get(it.codigo);
   buildBrandNames();
   variantes = agruparColores(items);
+  porClave = new Map();
+  for (const it of items) {
+    porClave.set(it.codigo, it);
+    const colores = Array.isArray(it.colores) ? it.colores.filter((c) => c && typeof c.color === 'string' && c.disponible > 0) : [];
+    it.variantesSerial = colores.map((c) => ({
+      ...it, color: c.color, disponible: Math.min(c.disponible, it.disponible), colores: undefined, variantesSerial: undefined,
+      base: it, clave: `${it.codigo}|${c.color}`,
+    }));
+    for (const v of it.variantesSerial) porClave.set(v.clave, v);
+  }
   if (!loadError) syncCart();
   fillFooter();
   render();

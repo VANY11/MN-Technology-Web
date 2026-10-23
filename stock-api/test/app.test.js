@@ -210,3 +210,40 @@ test('sin la vista de productos nuevos responde una lista vacía; otro error, 50
   await withServer(fail('42501'), async (base) => assert.deepEqual(await (await fetch(`${base}/nuevos`)).json(), []));
   await withServer(fail('57014'), async (base) => assert.equal((await fetch(`${base}/nuevos`)).status, 503));
 });
+
+test('GET /stock suma los colores por serial desde la vista, sin IMEI', async () => {
+  const sqls = [];
+  const query = async (sql) => {
+    sqls.push(sql);
+    if (/web_colores_disponibles/.test(sql)) {
+      return { rows: [
+        { code: 'MN-0640', color: ' Azul ', disponible: 2 },
+        { code: 'MN-0640', color: 'Negro', disponible: '1' },
+        { code: 'MN-0640', color: '', disponible: 3 },
+        { code: 'OTRO', color: 'Rojo', disponible: 0 },
+      ] };
+    }
+    return { rows: [{ code: 'MN-0640', name: 'Infinix', price: '145.00', stock: 3 }, { code: 'OTRO', name: 'Otro', price: null, stock: 1 }] };
+  };
+  await withServer(query, async (base) => {
+    const [tel, otro] = await (await fetch(`${base}/stock`)).json();
+    assert.deepEqual(tel.colores, [{ color: 'Azul', disponible: 2 }, { color: 'Negro', disponible: 1 }]);
+    assert.equal('colores' in otro, false);
+  });
+  assert.match(sqls[1], /FROM web_colores_disponibles v/);
+  assert.doesNotMatch(sqls[1], /mnstore_serials|imei|serial\b/i);
+});
+
+test('sin la vista de colores el stock sale igual', async () => {
+  for (const code of ['42P01', '57014']) {
+    const query = async (sql) => {
+      if (/web_colores_disponibles/.test(sql)) throw Object.assign(new Error('x'), { code });
+      return { rows: [{ code: 'A', name: 'A', price: null, stock: 1 }] };
+    };
+    await withServer(query, async (base) => {
+      const res = await fetch(`${base}/stock`);
+      assert.equal(res.status, 200);
+      assert.equal((await res.json())[0].codigo, 'A');
+    });
+  }
+});
