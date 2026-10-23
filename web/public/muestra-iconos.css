@@ -1,0 +1,98 @@
+/* MUESTRA (no fusionar): estilos de íconos y transiciones. html[data-estilo] = a (Trazo vivo), b (Burbuja 3D), c (Neón).
+   Usa solo variables del tema (--brand, --surface…), así funciona igual en claro y oscuro. */
+
+/* ---------- Común ---------- */
+.top { view-transition-name: cabecera; }
+.estilo-sel {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 90;
+  display: flex; gap: 4px; align-items: center; padding: 5px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+  font-size: 12.5px; font-weight: 700; color: var(--muted); max-width: calc(100vw - 24px); overflow-x: auto;
+}
+.estilo-sel span { padding: 0 6px 0 8px; white-space: nowrap; }
+.estilo-sel button { border: 0; border-radius: 999px; padding: 7px 11px; background: none; color: inherit; font: inherit; cursor: pointer; white-space: nowrap; }
+.estilo-sel button[aria-pressed="true"] { background: var(--gradient); color: #fff; }
+
+/* Pastilla deslizante de la navegación (los tres estilos). */
+@media (min-width: 900px) {
+  .nav { position: relative; }
+  .nav::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: var(--p-w, 0); transform: translateX(var(--p-x, 0));
+    border-radius: 10px; background: var(--brand-soft); transition: transform .45s cubic-bezier(.34, 1.4, .64, 1), width .45s cubic-bezier(.34, 1.4, .64, 1);
+  }
+  .nav a { position: relative; }
+  .nav a[aria-current="page"] { background: none; }
+}
+
+/* ---------- A · Trazo vivo: los íconos se dibujan solos y las páginas se deslizan ---------- */
+[data-estilo="a"] svg.dibuja :is(path, rect, circle, line, polyline) {
+  stroke-dasharray: 1; animation: ic-trazo .9s cubic-bezier(.65, 0, .35, 1) both;
+}
+[data-estilo="a"] svg.dibuja :is(path, rect, circle):nth-child(2) { animation-delay: .12s; }
+[data-estilo="a"] svg.dibuja :is(path, rect, circle):nth-child(3) { animation-delay: .24s; }
+[data-estilo="a"] svg.dibuja :is(path, rect, circle):nth-child(n+4) { animation-delay: .36s; }
+@keyframes ic-trazo { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+[data-estilo="a"] .tile-icon { background: var(--brand-soft); box-shadow: inset 0 0 0 1.5px var(--brand); }
+[data-estilo="a"] .tile-icon svg { stroke: var(--brand-ink); }
+[data-estilo="a"] .tile { animation: fx-up .5s ease both; }
+[data-estilo="a"] .tiles li:nth-child(2) .tile { animation-delay: .05s; }
+[data-estilo="a"] .tiles li:nth-child(3) .tile { animation-delay: .1s; }
+[data-estilo="a"] .tiles li:nth-child(4) .tile { animation-delay: .15s; }
+[data-estilo="a"] .tiles li:nth-child(n+5) .tile { animation-delay: .2s; }
+[data-estilo="a"]::view-transition-old(root) { animation: vt-sale-izq .35s cubic-bezier(.4, 0, .2, 1) both; }
+[data-estilo="a"]::view-transition-new(root) { animation: vt-entra-der .45s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes vt-sale-izq { to { opacity: 0; transform: translateX(-60px); } }
+@keyframes vt-entra-der { from { opacity: 0; transform: translateX(80px); } }
+
+/* ---------- B · Burbuja 3D: íconos tipo «clay» con brillo y rebote; las páginas se abren en círculo desde el toque ---------- */
+[data-estilo="b"] .tile-icon {
+  width: 58px; height: 58px; border-radius: 20px;
+  background: radial-gradient(120% 120% at 30% 20%, #c4b5fd 0%, #8b5cf6 38%, #6d28d9 70%, #3b82f6 120%);
+  box-shadow: inset 0 3px 6px rgb(255 255 255 / 0.55), inset 0 -6px 12px rgb(46 16 101 / 0.45), 0 14px 24px -10px rgb(109 40 217 / 0.65);
+  position: relative;
+}
+[data-estilo="b"] .tile-icon::after {
+  content: ""; position: absolute; top: 6px; left: 10px; width: 22px; height: 10px; border-radius: 50%;
+  background: rgb(255 255 255 / 0.45); filter: blur(2px); transform: rotate(-18deg);
+}
+[data-estilo="b"] .tile-icon svg { width: 27px; height: 27px; stroke-width: 2.3; filter: drop-shadow(0 2px 2px rgb(46 16 101 / 0.5)); }
+[data-estilo="b"] .tile { animation: ic-pop .6s cubic-bezier(.34, 1.56, .64, 1) both; }
+[data-estilo="b"] .tiles li:nth-child(2n) .tile { animation-delay: .06s; }
+[data-estilo="b"] .tiles li:nth-child(3n) .tile { animation-delay: .12s; }
+[data-estilo="b"] .tile:hover .tile-icon { animation: ic-gelatina .7s cubic-bezier(.34, 1.56, .64, 1); }
+[data-estilo="b"] svg.salta { animation: ic-salto .55s cubic-bezier(.34, 1.56, .64, 1); }
+[data-estilo="b"] .chip[aria-pressed="true"], [data-estilo="b"] .btn { transition: transform .3s cubic-bezier(.34, 1.56, .64, 1); }
+[data-estilo="b"] .btn:active, [data-estilo="b"] .chip:active, [data-estilo="b"] .tile:active { transform: scale(.94); }
+@keyframes ic-pop { from { opacity: 0; transform: scale(.6) translateY(20px); } }
+@keyframes ic-gelatina { 0% { transform: scale(1); } 30% { transform: scale(1.18, .86); } 50% { transform: scale(.9, 1.12); } 70% { transform: scale(1.06, .96); } 100% { transform: scale(1); } }
+@keyframes ic-salto { 0% { transform: none; } 40% { transform: translateY(-4px) scale(1.18) rotate(-8deg); } 100% { transform: none; } }
+[data-estilo="b"]::view-transition-old(root) { animation: none; }
+[data-estilo="b"]::view-transition-new(root) { animation: vt-circulo .6s cubic-bezier(.65, 0, .35, 1) both; }
+@keyframes vt-circulo { from { clip-path: circle(0 at var(--vt-x, 50%) var(--vt-y, 0)); } to { clip-path: circle(150vmax at var(--vt-x, 50%) var(--vt-y, 0)); } }
+
+/* ---------- C · Neón: íconos de línea con brillo que late y las páginas entran con zoom ---------- */
+[data-estilo="c"] svg.dibuja :is(path, rect, circle, line, polyline) {
+  stroke-dasharray: 1; animation: ic-trazo .7s ease-out both;
+}
+[data-estilo="c"] .tile-icon {
+  background: transparent; border: 1.5px solid var(--brand-2);
+  box-shadow: 0 0 0 4px var(--brand-soft), 0 0 22px -2px var(--brand-2), inset 0 0 14px -4px var(--brand-2);
+  animation: ic-late 2.6s ease-in-out infinite;
+}
+[data-estilo="c"] .tile-icon svg { stroke: var(--brand-ink); filter: drop-shadow(0 0 4px var(--brand-2)); }
+[data-estilo="c"] .tiles li:nth-child(odd) .tile-icon { animation-delay: -1.3s; }
+[data-estilo="c"] .tile:hover { border-color: var(--brand-2); box-shadow: 0 0 0 1px var(--brand-2), 0 0 30px -8px var(--brand-2); }
+[data-estilo="c"] .tile:hover .tile-icon svg { animation: ic-giro .6s ease; }
+[data-estilo="c"] .nav a[aria-current="page"], [data-estilo="c"] .chip[aria-pressed="true"] { text-shadow: 0 0 12px var(--brand-2); }
+[data-estilo="c"] .cart-btn svg, [data-estilo="c"] .tema-btn svg { filter: drop-shadow(0 0 3px var(--brand-2)); }
+@keyframes ic-late { 50% { box-shadow: 0 0 0 6px var(--brand-soft), 0 0 30px 0 var(--brand-2), inset 0 0 18px -2px var(--brand-2); } }
+@keyframes ic-giro { 50% { transform: rotate(-12deg) scale(1.15); } }
+[data-estilo="c"]::view-transition-old(root) { animation: vt-zoom-sale .3s ease-in both; }
+[data-estilo="c"]::view-transition-new(root) { animation: vt-zoom-entra .45s cubic-bezier(.2, .8, .2, 1) .1s both; }
+@keyframes vt-zoom-sale { to { opacity: 0; transform: scale(1.06); filter: blur(6px); } }
+@keyframes vt-zoom-entra { from { opacity: 0; transform: scale(.94); filter: blur(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-estilo] svg.dibuja *, [data-estilo] .tile, [data-estilo] .tile-icon, [data-estilo] svg.salta { animation: none !important; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
+}
