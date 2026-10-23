@@ -212,7 +212,7 @@ main > .section:last-child, #app > .section:last-child { padding-bottom: 64px; }
 .shop-head p { margin: 2px 0 0; }
 .shop-tools { display: flex; gap: 10px; }
 .shop-search { flex: 1 1 280px; max-width: 460px; align-self: center; }
-.currency { margin-left: auto; }
+.top-inner .tema-btn { margin-left: auto; }
 .filters-toggle { display: none; }
 .status { color: var(--muted); padding: 40px 0; text-align: center; }
 .status:empty { display: none; }
@@ -554,7 +554,6 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
 @media (max-width: 640px) {
   .top-inner { height: auto; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; gap: 10px; }
   .brand { margin-right: auto; }
-  .currency select { height: 40px; }
   .menu-btn { width: 40px; height: 40px; }
   .shop-search { order: 3; flex-basis: 100%; }
   .showcase-inner { grid-template-columns: 1fr; gap: 18px; padding-top: 24px; min-height: 0; }
@@ -601,7 +600,6 @@ select[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(2
   .cart-line .icon-btn { justify-self: end; }
   .toast { bottom: 80px; }
   .top-inner { gap: 8px; }
-  .currency select { padding: 0 28px 0 10px; background-position: right 8px center; }
   .brand-text { font-size: 16px; }
   .logo-mn { width: 50px; height: 32px; }
   .cart-line .icon-btn { grid-area: remove; width: 36px; height: 36px; align-self: start; }

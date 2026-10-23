@@ -32,7 +32,7 @@ export const STORE = {
   nosotros: {
     etiqueta: 'MN Technology // Tecnología a tu alcance',
     titulo: ['Tecnología que', 'sí está disponible'],
-    texto: 'Teléfonos, accesorios, audio, cámaras y más, con existencias reales y precios claros en dólares, bolívares y pesos.',
+    texto: 'Teléfonos, accesorios, audio, cámaras y más, con existencias reales y precios claros en dólares.',
     pilares: [
       { nombre: 'Misión', texto: 'Acercar la tecnología a nuestros clientes con productos disponibles, precios claros y una atención cercana.' },
       { nombre: 'Visión', texto: 'Ser la tienda de tecnología de confianza de nuestra comunidad, en tienda y en línea.' },
