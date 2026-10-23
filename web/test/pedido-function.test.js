@@ -47,6 +47,7 @@ test('reenvía el pedido con los tokens y solo los campos permitidos', async () 
   assert.equal(sent.cedula, 'V12345678');
   assert.equal(sent.telefono, '0412-1234567');
   assert.deepEqual(sent.items, [{ codigo: 'T001', cantidad: 2 }]);
+  assert.equal(sent.moneda, 'USD'); // aunque llegue VES: la tienda vende solo en dólares
 });
 
 test('rechaza pedidos de otro sitio, sin configurar o con el campo trampa', async () => {

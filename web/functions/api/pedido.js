@@ -58,7 +58,7 @@ export async function onRequestPost({ env, request }) {
   const cliente = revisarCliente(body);
   if (cliente.errores) return json({ error: Object.values(cliente.errores)[0], campos: cliente.errores }, 400);
   const { nombre, apellido, cedula, telefono } = cliente.datos;
-  const pedido = { nombre: `${nombre} ${apellido}`, cedula, telefono, moneda: ['USD', 'VES', 'COP'].includes(body.moneda) ? body.moneda : 'USD' };
+  const pedido = { nombre: `${nombre} ${apellido}`, cedula, telefono, moneda: 'USD' }; // La tienda vende solo en dólares.
   for (const [k, max] of Object.entries(CAMPOS)) {
     if (typeof body[k] === 'string') pedido[k] = body[k].trim().slice(0, max);
   }

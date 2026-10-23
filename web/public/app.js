@@ -8,13 +8,9 @@ import { iniciarEfectos, volarAlCarrito, celebrarEnFicha } from './efectos.js';
 const LOW_STOCK = 3;
 const PAGE = 48;
 const OTHERS = 'Otros';
-const FORMATS = {
-  precio: new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'USD' }),
-  precio_ves: new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'VES' }),
-  precio_cop: new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }),
-};
-const CURRENCY_CODES = { precio: 'USD', precio_ves: 'VES', precio_cop: 'COP' };
-const CURRENCY_NAMES = { precio: 'Dólares (USD)', precio_ves: 'Bolívares (Bs.)', precio_cop: 'Pesos (COP)' };
+// La tienda muestra los precios solo en dólares (sin Bs. ni COP).
+const MONEDA = 'precio';
+const FORMATS = { precio: new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'USD' }) };
 const number = new Intl.NumberFormat('es-VE');
 const CONTACT = STORE.contacto;
 
@@ -30,7 +26,6 @@ searchForm.innerHTML = '<label class="sr-only" for="q">Buscar productos</label>'
   + '<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'
   + '<input id="q" type="search" placeholder="Busca en el catálogo: producto, marca o modelo…" autocomplete="off">';
 const q = searchForm.querySelector('input');
-const currency = $('currency');
 const detail = $('detail');
 
 let items = [];
@@ -50,10 +45,6 @@ const order = new Map();
 const PEDIDOS = STORE.pedidos || {};
 
 $('year').textContent = new Date().getFullYear();
-try {
-  const saved = localStorage.getItem('moneda');
-  if (saved && FORMATS[saved]) currency.value = saved;
-} catch {}
 try {
   const saved = JSON.parse(localStorage.getItem('carrito') || '[]');
   if (Array.isArray(saved)) {
@@ -88,12 +79,12 @@ const categoryOf = (item) => item.categoria || OTHERS;
 const specList = (item) => (Array.isArray(item.especificaciones) ? item.especificaciones : []);
 const safePhoto = (url) =>
   typeof url === 'string' && (url.startsWith('https://') || url.startsWith('/api/foto/')) ? url : null;
-const priceText = (item, key = currency.value) => {
+const priceText = (item, key = MONEDA) => {
   const value = item[key];
   return value === null || value === undefined ? null : FORMATS[key].format(value);
 };
 // Precio de antes (tachado) de un producto en oferta.
-const wasText = (item, key = currency.value) => {
+const wasText = (item, key = MONEDA) => {
   const value = item.antes?.[key];
   return value === null || value === undefined ? null : FORMATS[key].format(value);
 };
@@ -222,17 +213,16 @@ function syncCart() {
 
 // Meta Pixel (pixel.js): eventos de la tienda para los anuncios. Solo productos y montos,
 // nunca datos del cliente. Si el pixel no cargó (bloqueador de anuncios), no pasa nada.
-function pixel(evento, lines, cur = currency.value) {
+function pixel(evento, lines) {
   if (typeof window.fbq !== 'function') return;
-  const precio = hasPrice(lines[0][0], cur) ? cur : 'precio';
   try {
     window.fbq('track', evento, {
       content_ids: lines.map(([it]) => it.codigo),
       contents: lines.map(([it, n]) => ({ id: it.codigo, quantity: n })),
       content_type: 'product',
       num_items: lines.reduce((s, [, n]) => s + n, 0),
-      value: Math.round(orderTotal(lines, precio) * 100) / 100,
-      currency: CURRENCY_CODES[precio],
+      value: Math.round(orderTotal(lines, MONEDA) * 100) / 100,
+      currency: 'USD',
     });
   } catch {}
 }
@@ -438,17 +428,14 @@ function showDetail(item) {
       return div;
     }),
   );
-  const keys = [currency.value, ...Object.keys(FORMATS).filter((k) => k !== currency.value)];
-  const rows = keys
-    .map((k) => [k, priceText(item, k)])
-    .filter(([, t]) => t)
-    .map(([k, t]) => {
-      const div = el('div');
-      const dd = el('dd', null, t);
-      if (wasText(item, k)) dd.append(el('s', 'was', wasText(item, k)));
-      div.append(el('dt', null, CURRENCY_NAMES[k]), dd);
-      return div;
-    });
+  const rows = [];
+  if (priceText(item)) {
+    const div = el('div');
+    const dd = el('dd', null, priceText(item));
+    if (wasText(item)) dd.append(el('s', 'was', wasText(item)));
+    div.append(el('dt', null, 'Precio (USD)'), dd);
+    rows.push(div);
+  }
   $('detail-prices').replaceChildren(...(rows.length ? rows : [el('p', 'muted', 'Consulta el precio con nosotros.')]));
   const [label, kind] = stockBadge(item.disponible);
   const stock = $('detail-stock');
@@ -644,14 +631,11 @@ function productSlide(it, promo) {
     out.push(p);
   }
   const prices = el('div', 'sc-prices');
-  const main = currency.value;
-  const others = Object.keys(FORMATS).filter((k) => k !== main && hasPrice(it, k));
   const big = el('span', 'sc-price-row');
-  big.append(el('span', 'sc-price', priceText(it, main) || priceText(it, 'precio')));
-  const was = wasText(it, main) || wasText(it, 'precio');
+  big.append(el('span', 'sc-price', priceText(it)));
+  const was = wasText(it);
   if (was) big.append(el('s', 'sc-was', was));
   prices.append(big);
-  if (others.length) prices.append(el('span', 'sc-alt', others.map((k) => priceText(it, k)).join('  ·  ')));
   const [label, kind] = urgency(it.disponible);
   const stock = withIcon(el('span', `sc-stock ${kind}`, label), 'box');
   const actions = el('div', 'sc-actions');
@@ -1138,7 +1122,7 @@ const hasPrice = (it, cur) => it[cur] !== null && it[cur] !== undefined;
 // Texto del pedido tal como llega por WhatsApp. `datos` = lo que el cliente llenó al confirmar.
 function orderText(datos) {
   const lines = orderLines();
-  const cur = currency.value;
+  const cur = MONEDA;
   const rows = lines.map(([it, n]) => {
     const price = hasPrice(it, cur) ? ` — ${FORMATS[cur].format(it[cur])} c/u` : ' — precio por confirmar';
     return `• ${n} x ${it.nombre}${it.codigo ? ` (${it.codigo})` : ''}${price}`;
@@ -1245,7 +1229,7 @@ function pageCart() {
   grid.append(list, side);
   wrap.append(grid);
 
-  const cur = currency.value;
+  const cur = MONEDA;
   const totals = el('dl', 'cart-totals');
   const subtotals = new Map();
   function updateTotals() {
@@ -1296,7 +1280,6 @@ function pageCart() {
 
   const card = el('div', 'cart-card');
   card.append(el('h2', null, 'Resumen'), totals);
-  if (cur !== 'precio') card.append(el('p', 'small muted', 'Montos calculados con la tasa del día de cada producto.'));
   const clear = el('button', 'link-more', 'Vaciar carrito');
   clear.type = 'button';
   clear.addEventListener('click', () => {
@@ -1491,7 +1474,7 @@ function checkoutForm() {
   // Pedido en línea: queda guardado en el sistema MN Tech (pantalla «Pedidos web»).
   async function sendOrder(datos) {
     const lines = orderLines();
-    const cur = currency.value;
+    const cur = MONEDA;
     const span = submit.lastChild;
     submit.disabled = true;
     span.textContent = 'Enviando…';
@@ -1504,14 +1487,14 @@ function checkoutForm() {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           nombre: datos.nombrePila, apellido: datos.apellido, telefono: datos.telefono, cedula: datos.cedula, entrega: datos.entrega, direccion: datos.direccion,
-          pago: datos.pago, notas: datos.notas, moneda: CURRENCY_CODES[cur], sitio: trap.value,
+          pago: datos.pago, notas: datos.notas, moneda: 'USD', sitio: trap.value,
           items: lines.map(([it, n]) => ({ codigo: it.codigo, cantidad: n })),
         }),
       });
       data = await res.json().catch(() => null);
     } catch {}
     if (res?.status === 201 && data?.numero) {
-      if (lines.length) pixel('Purchase', lines, cur);
+      if (lines.length) pixel('Purchase', lines);
       order.clear();
       saveCart();
       $('toast').hidden = true;
@@ -1709,7 +1692,7 @@ function pageAbout() {
     ['cmd', '> sync --live'],
     ['ok', `Productos publicados: ${number.format(items.length)}`],
     ['ok', `Categorías: ${number.format(countBy(items, (it) => it.categoria).size)}`],
-    ['ok', 'Precios USD · Bs. · COP'],
+    ['ok', 'Precios en USD'],
     ['ok', `Última sincronización: ${now}`],
   ];
   for (const [kind, text] of lines) {
@@ -1890,11 +1873,6 @@ q.addEventListener('input', () => {
   render();
   q.focus({ preventScroll: true });
   try { q.setSelectionRange(a, b); } catch {}
-});
-
-currency.addEventListener('change', () => {
-  try { localStorage.setItem('moneda', currency.value); } catch {}
-  render();
 });
 
 async function load() {
