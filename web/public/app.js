@@ -4,6 +4,7 @@ import { revisarCliente, PREFIJOS_CELULAR } from './datos-cliente.js';
 import { aplicarPromos, etiquetaPromo, enLugar } from './promos.js';
 import { indice, puntaje } from './buscar.js';
 import { iniciarEfectos, volarAlCarrito, celebrarEnFicha } from './efectos.js';
+import { colorDe, esCampoColor, muestra, agruparColores, nombreDiceColor } from './colores.js';
 
 const LOW_STOCK = 3;
 const PAGE = 48;
@@ -34,6 +35,7 @@ let promos = [];
 let ordenCats = new Map();
 // Productos nuevos (MN Tech: creados o con mercancía que entró en los últimos 30 días): código → { desde, motivo }.
 let nuevos = new Map();
+let variantes = new Map(); // producto → sus versiones en otros colores (colores.js)
 let loadError = false;
 let pedidosOnline = false; // la web guarda el pedido en el sistema MN Tech (GET /api/pedido)
 // Estado que no va en la dirección: filtros por especificación, orden y cuántos se ven.
@@ -77,6 +79,13 @@ function withIcon(node, key, after = false) {
 const normalize = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const categoryOf = (item) => item.categoria || OTHERS;
 const specList = (item) => (Array.isArray(item.especificaciones) ? item.especificaciones : []);
+// Las especificaciones sin «Color»: el color se muestra aparte, con su muestra.
+const specsSinColor = (item) => specList(item).filter((s) => !esCampoColor(s.campo));
+// Para los filtros del catálogo el color cuenta como una especificación más.
+const specsFiltro = (item) => {
+  const c = colorDe(item);
+  return c ? [...specsSinColor(item), { campo: 'Color', valor: c }] : specsSinColor(item);
+};
 const safePhoto = (url) =>
   typeof url === 'string' && (url.startsWith('https://') || url.startsWith('/api/foto/')) ? url : null;
 const priceText = (item, key = MONEDA) => {
@@ -162,6 +171,37 @@ const categoriasEnOrden = (counts) => {
 function stockBadge(n) {
   if (n <= LOW_STOCK) return [n === 1 ? 'Última unidad' : `Últimas ${n}`, 'low'];
   return [`${number.format(n)} disponibles`, 'ok'];
+}
+
+// Círculo con el color (o sus dos colores). Si el nombre no es un color conocido, no se dibuja.
+function swatch(color, className = 'swatch') {
+  const fondo = muestra(color);
+  const s = el('span', fondo ? className : `${className} unknown`);
+  s.setAttribute('aria-hidden', 'true');
+  if (fondo) s.style.setProperty('--sw', fondo);
+  return s;
+}
+
+// Línea de color de la tarjeta: su color y, si viene en otros, los puntos de esos colores.
+function colorLine(item) {
+  const color = colorDe(item);
+  if (!color) return null;
+  const p = el('p', 'color-line');
+  const lista = variantes.get(item);
+  if (lista) {
+    const dots = el('span', 'swatches');
+    for (const v of lista.slice(0, 5)) {
+      const d = swatch(colorDe(v));
+      if (v === item) d.classList.add('on');
+      dots.append(d);
+    }
+    if (lista.length > 5) dots.append(el('span', 'swatch-more', `+${lista.length - 5}`));
+    p.append(dots, el('span', null, color));
+    p.title = `Disponible en ${lista.length} colores`;
+  } else {
+    p.append(swatch(color), el('span', null, color));
+  }
+  return p;
 }
 
 function photoInto(box, item) {
@@ -299,7 +339,9 @@ function productCard(item) {
   const body = el('div', 'body');
   body.append(el('h3', 'name', item.nombre));
   if (item.codigo) body.append(el('p', 'code-line', `Código: ${item.codigo}`));
-  const specs = specList(item).slice(0, 2).map((s) => `${s.campo}: ${s.valor}`);
+  const colores = colorLine(item);
+  if (colores) body.append(colores);
+  const specs = specsSinColor(item).slice(0, 2).map((s) => `${s.campo}: ${s.valor}`);
   if (specs.length) body.append(el('p', 'spec-line', specs.join(' · ')));
   const [label, kind] = stockBadge(item.disponible);
   body.append(withIcon(el('span', `badge ${kind}`, label), 'box'));
@@ -418,11 +460,12 @@ function showDetail(item) {
   promoBadge($('detail-photo'), item);
   $('detail-brand').textContent = [brandKey(item) && brandName(brandKey(item)), categoryOf(item)].filter(Boolean).join(' · ');
   $('detail-name').textContent = item.nombre;
-  $('detail-meta').textContent = [item.modelo && `Modelo ${item.modelo}`, item.ram && `RAM ${item.ram}`, item.almacenamiento, item.color]
+  $('detail-meta').textContent = [item.modelo && `Modelo ${item.modelo}`, item.ram && `RAM ${item.ram}`, item.almacenamiento]
     .filter(Boolean)
     .join(' · ');
+  detailColors(item);
   $('detail-spec-list').replaceChildren(
-    ...specList(item).map((s) => {
+    ...specsSinColor(item).map((s) => {
       const div = el('div');
       div.append(el('dt', null, s.campo), el('dd', null, s.valor));
       return div;
@@ -464,6 +507,35 @@ function showDetail(item) {
   share.replaceChildren(withIcon(el('span', null, 'Compartir'), 'share'));
   share.onclick = () => shareProduct(item);
   if (typeof detail.showModal === 'function') detail.showModal();
+}
+
+// «Color: Negro» y, si el mismo producto viene en otros colores, un botón por color que cambia la ficha.
+function detailColors(item) {
+  const box = $('detail-colors');
+  const color = colorDe(item);
+  box.hidden = !color;
+  if (!color) return box.replaceChildren();
+  const head = el('p', 'detail-color-name');
+  head.append(el('span', 'muted', 'Color: '), el('strong', null, color));
+  const lista = variantes.get(item);
+  if (!lista) {
+    head.prepend(swatch(color));
+    return box.replaceChildren(head);
+  }
+  const row = el('div', 'color-options');
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', 'Colores disponibles');
+  for (const v of lista) {
+    const b = el('button', 'color-opt');
+    b.type = 'button';
+    b.title = colorDe(v);
+    b.setAttribute('aria-label', `Color ${colorDe(v)}`);
+    b.setAttribute('aria-pressed', String(v === item));
+    b.append(swatch(colorDe(v)), el('span', null, colorDe(v)));
+    if (v !== item) b.addEventListener('click', () => showDetail(v));
+    row.append(b);
+  }
+  box.replaceChildren(head, row);
 }
 
 detail.addEventListener('click', (e) => {
@@ -910,7 +982,7 @@ function pageHome() {
 // Búsqueda tolerante a errores (buscar.js): el índice de cada producto se arma una vez.
 const indices = new WeakMap();
 const indiceDe = (it) => {
-  if (!indices.has(it)) indices.set(it, indice([it.nombre, it.marca, it.modelo, it.codigo, it.categoria, ...specList(it).map((x) => x.valor)]));
+  if (!indices.has(it)) indices.set(it, indice([it.nombre, it.marca, it.modelo, it.codigo, it.categoria, colorDe(it), ...specList(it).map((x) => x.valor)]));
   return indices.get(it);
 };
 const relevancia = (it, term) => puntaje(indiceDe(it), term);
@@ -918,7 +990,7 @@ const relevancia = (it, term) => puntaje(indiceDe(it), term);
 const matchesSpecs = (item) => {
   for (const [campo, valores] of specFilters) {
     if (!valores.size) continue;
-    const spec = specList(item).find((s) => s.campo === campo);
+    const spec = specsFiltro(item).find((s) => s.campo === campo);
     if (!spec || !valores.has(spec.valor)) return false;
   }
   return true;
@@ -1067,7 +1139,7 @@ function pageProducts(params) {
     if (category) {
       const fields = new Map();
       for (const it of inBrand) {
-        for (const { campo, valor } of specList(it)) {
+        for (const { campo, valor } of specsFiltro(it)) {
           if (!fields.has(campo)) fields.set(campo, new Map());
           fields.get(campo).set(valor, (fields.get(campo).get(valor) || 0) + 1);
         }
@@ -1119,13 +1191,19 @@ function orderTotal(lines, cur) {
 
 const hasPrice = (it, cur) => it[cur] !== null && it[cur] !== undefined;
 
+// « — Negro» detrás del nombre en el pedido, salvo que el nombre ya diga el color.
+const colorExtra = (it) => {
+  const c = colorDe(it);
+  return c && !nombreDiceColor(it.nombre, c) ? ` — ${c}` : '';
+};
+
 // Texto del pedido tal como llega por WhatsApp. `datos` = lo que el cliente llenó al confirmar.
 function orderText(datos) {
   const lines = orderLines();
   const cur = MONEDA;
   const rows = lines.map(([it, n]) => {
     const price = hasPrice(it, cur) ? ` — ${FORMATS[cur].format(it[cur])} c/u` : ' — precio por confirmar';
-    return `• ${n} x ${it.nombre}${it.codigo ? ` (${it.codigo})` : ''}${price}`;
+    return `• ${n} x ${it.nombre}${colorExtra(it)}${it.codigo ? ` (${it.codigo})` : ''}${price}`;
   });
   const out = [datos ? `Hola, quiero hacer este pedido (${datos.numero}):` : 'Hola, quiero cotizar:', ...rows, ''];
   out.push(`Total aproximado: ${FORMATS[cur].format(orderTotal(lines, cur))}`);
@@ -1203,6 +1281,12 @@ function readClient() {
   }
 }
 
+function cartColor(it) {
+  const s = el('span', 'cart-color');
+  s.append(swatch(colorDe(it)), el('span', null, `Color: ${colorDe(it)}`));
+  return s;
+}
+
 function pageCart() {
   const wrap = el('div', 'cart-page wrap');
   wrap.append(el('h1', null, 'Tu carrito'));
@@ -1263,6 +1347,7 @@ function pageCart() {
     const info = el('div', 'cart-info');
     info.append(
       el('span', 'cart-name', it.nombre),
+      ...(colorDe(it) ? [cartColor(it)] : []),
       el('span', 'prow-code', [it.codigo, categoryOf(it)].filter(Boolean).join(' · ')),
       el('span', 'cart-unit', hasPrice(it, cur) ? `${FORMATS[cur].format(it[cur])} c/u` : 'Precio por confirmar'),
     );
@@ -1535,7 +1620,7 @@ function receivedView(datos, lines, cur) {
   const list = el('ul', 'received-list');
   for (const [it, n] of lines) {
     const li = el('li');
-    li.append(el('span', null, `${n} × ${it.nombre}`), el('strong', null, hasPrice(it, cur) ? FORMATS[cur].format(it[cur] * n) : 'Por confirmar'));
+    li.append(el('span', null, `${n} × ${it.nombre}${colorExtra(it)}`), el('strong', null, hasPrice(it, cur) ? FORMATS[cur].format(it[cur] * n) : 'Por confirmar'));
     list.append(li);
   }
   const total = el('li', 'received-total');
@@ -1913,6 +1998,7 @@ async function load() {
   aplicarPromos(items, promos);
   for (const it of items) if (nuevos.has(it.codigo)) it.nuevo = nuevos.get(it.codigo);
   buildBrandNames();
+  variantes = agruparColores(items);
   if (!loadError) syncCart();
   fillFooter();
   render();
