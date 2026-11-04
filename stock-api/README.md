@@ -29,6 +29,11 @@ Cloudflare Access; nunca se abre un puerto en el router.
 `foto` es la URL https si el sistema guardó una, o `/api/foto/<código>?v=...` si la foto está
 guardada en el servidor (el `v` cambia cuando cambia la foto, para renovar la caché).
 
+Si el producto tiene más fotos en MN Tech («Más fotos» de la ficha), sale además `fotos`: todas en orden, la principal
+primero (`["/api/foto/LAP-001?v=…", "/api/foto/LAP-001/2?v=…", …]`, hasta 12). Se leen de la vista
+`web_producto_fotos` (migración 20261120_01 de MN Tech, con `GRANT SELECT` a `mnstock`); sin la vista, `fotos` no sale.
+`GET /foto/<código>/<n>` (n = 2 a 12) da la foto n, solo de productos que se ven en la web.
+
 `GET /foto/<código>` devuelve la imagen de ese producto, solo si el producto se ve en la web.
 La pide a la app MN Tech local (`PHOTO_ORIGIN`, por defecto `http://127.0.0.1:1107`) con la ruta
 guardada en `foto_url`, y solo entrega imágenes (jpeg, png, webp, gif, avif) de hasta 8 MB.

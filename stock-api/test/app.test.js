@@ -247,3 +247,64 @@ test('sin la vista de colores el stock sale igual', async () => {
     });
   }
 });
+
+test('GET /stock suma las fotos de más desde la vista, la principal primero', async () => {
+  const query = async (sql) => {
+    if (/web_producto_fotos/.test(sql)) {
+      return { rows: [
+        { code: 'MON 1', url: '/uploads/mnstore-products/b.png' },
+        { code: 'MON 1', url: '/uploads/mnstore-products/c.png' },
+        { code: 'MON 1', url: '/uploads/../x.png' },
+        { code: 'SIN', url: '/uploads/mnstore-products/d.png' },
+      ] };
+    }
+    if (/web_colores_disponibles/.test(sql)) return { rows: [] };
+    return { rows: [
+      { code: 'MON 1', name: 'Monitor', price: '10', stock: 1, foto_url: '/uploads/mnstore-products/a.png' },
+      { code: 'SIN', name: 'Sin principal', price: '10', stock: 1, foto_url: null },
+      { code: 'OTRO', name: 'Otro', price: '10', stock: 1, foto_url: '/uploads/mnstore-products/e.png' },
+    ] };
+  };
+  await withServer(query, async (base) => {
+    const [mon, sin, otro] = await (await fetch(`${base}/stock`)).json();
+    assert.equal(mon.fotos.length, 3);
+    assert.equal(mon.fotos[0], mon.foto);
+    assert.match(mon.fotos[1], /^\/api\/foto\/MON%201\/2\?v=[0-9a-f]{10}$/);
+    assert.match(mon.fotos[2], /^\/api\/foto\/MON%201\/3\?v=[0-9a-f]{10}$/);
+    assert.equal('fotos' in sin, false);
+    assert.equal('fotos' in otro, false);
+  });
+});
+
+test('sin la vista de fotos el stock sale igual', async () => {
+  const query = async (sql) => {
+    if (/web_producto_fotos/.test(sql)) throw Object.assign(new Error('x'), { code: '42P01' });
+    if (/web_colores_disponibles/.test(sql)) return { rows: [] };
+    return { rows: [{ code: 'A', name: 'A', price: '1', stock: 1, foto_url: '/uploads/a.png' }] };
+  };
+  await withServer(query, async (base) => {
+    const res = await fetch(`${base}/stock`);
+    assert.equal(res.status, 200);
+    assert.equal('fotos' in (await res.json())[0], false);
+  });
+});
+
+test('GET /foto/:codigo/:n trae la foto n de la vista, solo de productos publicados', async () => {
+  const pedidas = [];
+  const query = async (sql, params) => {
+    pedidas.push([sql, params]);
+    return { rows: params[1] === 0 ? [{ foto_url: '/uploads/mnstore-products/b.png' }] : [] };
+  };
+  const fetchPhoto = async (url) => new Response(new Uint8Array([1, 2]), { headers: { 'Content-Type': 'image/png' }, status: String(url).endsWith('/b.png') ? 200 : 404 });
+  await withServer(query, async (base) => {
+    const ok = await fetch(`${base}/foto/MON%201/2`);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers.get('Content-Type'), 'image/png');
+    assert.equal((await fetch(`${base}/foto/MON%201/3`)).status, 404);
+    assert.equal((await fetch(`${base}/foto/MON%201/13`)).status, 404);
+    assert.equal((await fetch(`${base}/foto/MON%201/0`)).status, 404);
+  }, { fetchPhoto });
+  assert.match(pedidas[0][0], /FROM web_producto_fotos v[\s\S]*p\.is_active AND NOT p\.maranet_only AND p\.stock > 0/);
+  assert.deepEqual(pedidas[0][1], ['MON 1', 0]);
+  assert.equal(pedidas.length, 2);
+});

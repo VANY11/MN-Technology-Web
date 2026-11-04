@@ -58,3 +58,28 @@ test('si el producto no tiene foto responde 404', async () => {
   globalThis.fetch = async () => Response.json({ error: 'Sin foto' }, { status: 404 });
   assert.equal((await run('A')).status, 404);
 });
+
+test('/api/foto/<código>/<n> pide la foto n por el túnel y la cachea aparte', async () => {
+  const { onRequestGet: fotoN } = await import('../functions/api/foto/[code]/[n].js');
+  const pedidas = [];
+  globalThis.fetch = async (url) => {
+    pedidas.push(String(url));
+    return new Response(new Uint8Array([7]), { headers: { 'Content-Type': 'image/webp' } });
+  };
+  const correr = async (n) => {
+    const pending = [];
+    const request = new Request(`https://mntechve.com/api/foto/TEL%201/${n}?v=x1`);
+    const res = await fotoN({ env, request, params: { code: 'TEL 1', n: String(n) }, waitUntil: (p) => pending.push(p) });
+    await Promise.all(pending);
+    return res;
+  };
+  const res = await correr(2);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('Content-Type'), 'image/webp');
+  assert.deepEqual(pedidas, ['https://api-stock.example.com/foto/TEL%201/2']);
+  assert.equal((await correr(2)).status, 200);
+  assert.equal(pedidas.length, 1, 'la segunda vez sale de la caché');
+  assert.equal((await correr(1)).status, 404);
+  assert.equal((await correr(13)).status, 404);
+  assert.equal(pedidas.length, 1);
+});

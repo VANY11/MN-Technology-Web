@@ -187,3 +187,44 @@ export function coloresPorCodigo(rows) {
   }
   return out;
 }
+
+// Más fotos de un producto (MN Tech, migración 20261120_01): la principal sigue en foto_url y las demás en la vista
+// web_producto_fotos (código, ruta y orden; el rol mnstock tiene SELECT sobre la vista, nunca sobre la tabla).
+export const MAX_FOTOS = 12; // en total, con la principal (el tope de MN Tech)
+export const FOTOS_SQL = `
+  SELECT v.producto_code AS code, v.url
+  FROM web_producto_fotos v
+  ORDER BY v.producto_code, v.orden, v.url
+`;
+
+// La foto n (2 = la primera de más) de un producto, y solo si ese producto se ve en la web.
+export const FOTO_EXTRA_SQL = `
+  SELECT v.url AS foto_url
+  FROM web_producto_fotos v
+  JOIN mnstore_products p ON p.code = v.producto_code
+  WHERE v.producto_code = $1 AND ${PUBLIC_FILTER}
+  ORDER BY v.orden, v.url
+  OFFSET $2 LIMIT 1
+`;
+
+// Mapa código → [ruta, …] con las fotos de más (en su orden, solo rutas válidas y sin pasar del tope).
+export function fotosPorCodigo(rows) {
+  const out = new Map();
+  for (const row of rows) {
+    const codigo = text(row.code, 64);
+    const path = localPhotoPath(row.url);
+    if (!codigo || !path) continue;
+    if (!out.has(codigo)) out.set(codigo, []);
+    const lista = out.get(codigo);
+    if (lista.length < MAX_FOTOS - 1) lista.push(path);
+  }
+  return out;
+}
+
+// URL pública de la foto n de un producto: /api/foto/<código>/<n>?v=… (el ?v= cambia si cambia esa foto).
+export function publicExtraPhoto(code, n, url) {
+  const path = localPhotoPath(url);
+  if (!path || !code) return null;
+  const v = createHash('sha1').update(path).digest('hex').slice(0, 10);
+  return `/api/foto/${encodeURIComponent(code)}/${n}?v=${v}`;
+}
