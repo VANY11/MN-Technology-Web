@@ -1,9 +1,10 @@
 import {
-  STOCK_SQL, PHOTO_SQL, PROMOS_SQL, CATS_SQL, NUEVOS_SQL, COLORES_SQL, coloresPorCodigo, toPublicItem, toPublicPromo, toPublicCat, toPublicNuevo, localPhotoPath,
+  STOCK_SQL, PHOTO_SQL, PROMOS_SQL, CATS_SQL, NUEVOS_SQL, COLORES_SQL, FOTOS_SQL, FOTO_EXTRA_SQL, MAX_FOTOS, coloresPorCodigo,
+  fotosPorCodigo, publicExtraPhoto, toPublicItem, toPublicPromo, toPublicCat, toPublicNuevo, localPhotoPath,
 } from './query.js';
 
 // Sin la vista (MN Tech aún sin ese cambio) o sin permiso sobre ella: lista vacía (promociones, orden de categorías,
-// productos nuevos, colores por serial).
+// productos nuevos, colores por serial, fotos de más).
 const SIN_PROMOS = new Set(['42P01', '42501']);
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -19,12 +20,14 @@ function send(res, status, body) {
 
 // photoOrigin: la app MN Tech local (nginx), que ya sirve las fotos que sube Yvan.
 export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http://127.0.0.1:1107', log = console }) {
-  async function photo(res, code) {
+  // n: 1 = la foto principal; 2… = las de más (vista web_producto_fotos)
+  async function photo(res, code, n = 1) {
     let path;
     try {
-      const { rows } = await query(PHOTO_SQL, [code]);
+      const { rows } = n === 1 ? await query(PHOTO_SQL, [code]) : await query(FOTO_EXTRA_SQL, [code, n - 2]);
       path = localPhotoPath(rows[0]?.foto_url);
     } catch (err) {
+      if (n > 1 && SIN_PROMOS.has(err.code)) return send(res, 404, { error: 'Sin foto' });
       log.error('Error leyendo la foto:', err.message);
       return send(res, 503, { error: 'Foto no disponible' });
     }
@@ -76,6 +79,17 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
           } catch (err) {
             if (!SIN_PROMOS.has(err.code)) log.error('Error leyendo los colores:', err.message);
           }
+          // Fotos de más: `fotos` = todas en orden (la principal primero), solo si hay más de una.
+          try {
+            const extras = fotosPorCodigo((await query(FOTOS_SQL)).rows);
+            for (const it of items) {
+              const lista = it.foto ? extras.get(it.codigo) : null;
+              if (!lista?.length) continue;
+              it.fotos = [it.foto, ...lista.map((path, i) => publicExtraPhoto(it.codigo, i + 2, path))];
+            }
+          } catch (err) {
+            if (!SIN_PROMOS.has(err.code)) log.error('Error leyendo las fotos:', err.message);
+          }
         }
         return send(res, 200, items);
       } catch (err) {
@@ -117,7 +131,7 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
       }
     }
 
-    const fotoMatch = pathname.match(/^\/foto\/([^/]{1,64})$/);
+    const fotoMatch = pathname.match(/^\/foto\/([^/]{1,64})(?:\/(\d{1,2}))?$/);
     if (fotoMatch) {
       let code;
       try {
@@ -125,7 +139,9 @@ export function createHandler({ query, fetchPhoto = fetch, photoOrigin = 'http:/
       } catch {
         return send(res, 404, { error: 'No encontrado' });
       }
-      return photo(res, code);
+      const n = fotoMatch[2] ? Number(fotoMatch[2]) : 1;
+      if (n < 1 || n > MAX_FOTOS) return send(res, 404, { error: 'No encontrado' });
+      return photo(res, code, n);
     }
 
     return send(res, 404, { error: 'No encontrado' });

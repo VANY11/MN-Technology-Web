@@ -474,11 +474,75 @@ function carouselSection(title, cards, subtitle) {
 
 /* ---------- Detalle ---------- */
 
+// Varias fotos (MN Tech, «Más fotos»: item.fotos, la principal primero): flechas, puntos, deslizar con el dedo y las
+// teclas ← →. Una foto que no carga se salta; si no carga ninguna, el ícono de la categoría. Devuelve false con menos
+// de dos fotos (la ficha usa photoInto, como siempre).
+let galeriaActual = null;
+function galeriaDetalle(box, item) {
+  galeriaActual = null;
+  const fotos = [...new Set((Array.isArray(item.fotos) ? item.fotos : []).map(safePhoto).filter(Boolean))].slice(0, 12);
+  if (fotos.length < 2) return false;
+  let i = 0;
+  const img = el('img');
+  img.alt = item.nombre;
+  img.decoding = 'async';
+  const dots = el('div', 'gal-dots');
+  const prev = el('button', 'gal-btn gal-prev');
+  const next = el('button', 'gal-btn gal-next');
+  prev.type = next.type = 'button';
+  prev.setAttribute('aria-label', 'Foto anterior');
+  next.setAttribute('aria-label', 'Foto siguiente');
+  prev.append(icon('left', 'ico'));
+  next.append(icon('right', 'ico'));
+  const pintar = () => {
+    img.src = fotos[i];
+    img.alt = `${item.nombre} (foto ${i + 1} de ${fotos.length})`;
+    dots.replaceChildren(...fotos.map((_, k) => {
+      const d = el('button', k === i ? 'gal-dot on' : 'gal-dot');
+      d.type = 'button';
+      d.setAttribute('aria-label', `Ver la foto ${k + 1}`);
+      if (k === i) d.setAttribute('aria-current', 'true');
+      d.addEventListener('click', (e) => { e.stopPropagation(); ir(k); });
+      return d;
+    }));
+    const solo = fotos.length < 2;
+    prev.hidden = next.hidden = dots.hidden = solo;
+    // La siguiente ya queda en la caché del navegador
+    if (!solo) new Image().src = fotos[(i + 1) % fotos.length];
+  };
+  const ir = (n) => { i = (n + fotos.length) % fotos.length; pintar(); };
+  img.addEventListener('error', () => {
+    fotos.splice(i, 1);
+    if (!fotos.length) { galeriaActual = null; box.replaceChildren(icon(iconFor(item.categoria), 'placeholder')); return; }
+    if (i >= fotos.length) i = 0;
+    pintar();
+  });
+  prev.addEventListener('click', (e) => { e.stopPropagation(); ir(i - 1); });
+  next.addEventListener('click', (e) => { e.stopPropagation(); ir(i + 1); });
+  let x0 = null;
+  box.ontouchstart = (e) => { x0 = e.touches.length === 1 ? e.touches[0].clientX : null; };
+  box.ontouchend = (e) => {
+    if (x0 === null || !galeriaActual) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    x0 = null;
+    if (Math.abs(dx) > 40) ir(dx < 0 ? i + 1 : i - 1);
+  };
+  box.replaceChildren(img, prev, next, dots);
+  galeriaActual = { ir: (d) => ir(i + d) };
+  pintar();
+  return true;
+}
+detail.addEventListener('keydown', (e) => {
+  if (!galeriaActual || !detail.open || e.target.closest('input, textarea, select')) return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); galeriaActual.ir(-1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); galeriaActual.ir(1); }
+});
+
 // elegido: el color con el que se abre la ficha de un teléfono (p. ej. desde una línea del carrito).
 function showDetail(item, elegido = null) {
   if (item.base) return showDetail(item.base, item.color);
   pixel('ViewContent', [[item, 1]]);
-  photoInto($('detail-photo'), item);
+  if (!galeriaDetalle($('detail-photo'), item)) photoInto($('detail-photo'), item);
   promoBadge($('detail-photo'), item);
   $('detail-brand').textContent = [brandKey(item) && brandName(brandKey(item)), categoryOf(item)].filter(Boolean).join(' · ');
   $('detail-name').textContent = item.nombre;
