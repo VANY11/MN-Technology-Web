@@ -238,6 +238,113 @@ async function consultarVisitas(env) {
   return datos;
 }
 
+// ---------- rangos largos (15 días a un año) ----------
+// Se piden aparte, solo cuando el panel abre esa pestaña, y se guardan 10 minutos.
+export const RANGOS = {
+  quincena: { dias: 15, grupo: 'dia' },
+  mes: { dias: 30, grupo: 'dia' },
+  trimestre: { dias: 91, grupo: 'dia' },
+  semestre: { dias: 182, grupo: 'semana' },
+  anio: { dias: 365, grupo: 'mes' },
+};
+const RANGO_CACHE_SECONDS = 600;
+const DIA = 86400e3;
+
+// Cuánto deja pedir Cloudflare en esta cuenta: hasta qué fecha guarda datos y cuánto abarca cada consulta.
+const LIMITES_QUERY = `query Limites($cuenta: string!) {
+  viewer { accounts(filter: { accountTag: $cuenta }) {
+    settings { rumPageloadEventsAdaptiveGroups { maxDuration notOlderThan } }
+  } }
+}`;
+
+async function limitesRum(env) {
+  try {
+    const c = await graphql(env, LIMITES_QUERY, {});
+    const l = c.settings?.rumPageloadEventsAdaptiveGroups;
+    return { maxMs: (Number(l?.maxDuration) || 0) * 1000, guardaMs: (Number(l?.notOlderThan) || 0) * 1000 };
+  } catch {
+    return { maxMs: 0, guardaMs: 0 };
+  }
+}
+
+// Semana que empieza el lunes y mes, en hora de Venezuela, como clave AAAA-MM-DD.
+export function claveGrupo(dia, grupo) {
+  if (grupo === 'dia') return dia;
+  const d = new Date(`${dia}T00:00:00Z`);
+  if (grupo === 'mes') return `${dia.slice(0, 7)}-01`;
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+export async function consultarRango(env, nombre, ahora = Date.now()) {
+  const rango = RANGOS[nombre];
+  const hoy = inicioDeHoyVE(ahora).getTime();
+  let pedido = hoy - (rango.dias - 1) * DIA;
+  // El año son los últimos 12 meses completos de calendario, contando el actual.
+  if (rango.grupo === 'mes') {
+    const [a, m] = diaVE(hoy + 3600e3).split('-').map(Number);
+    pedido = Date.UTC(a, m - 12, 1) - OFFSET_VE_MS;
+  }
+  const { maxMs, guardaMs } = await limitesRum(env);
+  // Lo que Cloudflare ya borró no se pide (con una hora de margen); el panel avisa desde qué día hay datos.
+  const desde = guardaMs ? Math.max(pedido, ahora - guardaMs + 3600e3) : pedido;
+  // Cada tramo cabe en una consulta: el máximo que Cloudflare permite, nunca más de 30 días (720 horas).
+  const tramo = Math.min(maxMs || 7 * DIA, 30 * DIA);
+  const tramos = [];
+  for (let t = desde; t < ahora; t += tramo) tramos.push([t, Math.min(ahora, t + tramo)]);
+  const filtro = ([a, b]) => ({
+    datetime_geq: new Date(a).toISOString(),
+    datetime_lt: new Date(b).toISOString(),
+    ...(env.CF_WEB_ANALYTICS_SITE ? { siteTag: env.CF_WEB_ANALYTICS_SITE } : {}),
+  });
+  const limite = Math.ceil(tramo / 3600e3) + 2;
+  const query = `query Rango($cuenta: string!, ${tramos.map((_, i) => `$f${i}: ${PAGELOAD}`).join(', ')}) {
+  viewer { accounts(filter: { accountTag: $cuenta }) {
+    ${tramos.map((_, i) => `t${i}: rumPageloadEventsAdaptiveGroups(filter: $f${i}, limit: ${limite}, orderBy: [datetimeHour_ASC]) { count sum { visits } dimensions { datetimeHour } }`).join('\n    ')}
+  } }
+}`;
+  const c = await graphql(env, query, Object.fromEntries(tramos.map((t, i) => [`f${i}`, filtro(t)])));
+
+  // Todos los grupos del periodo, con cero donde no hubo visitas.
+  const grupos = new Map();
+  for (let t = pedido + 3600e3; t < ahora; t += DIA) {
+    const k = claveGrupo(diaVE(t), rango.grupo);
+    if (!grupos.has(k)) grupos.set(k, { t: k, paginas: 0, visitas: 0 });
+  }
+  for (let i = 0; i < tramos.length; i++) {
+    for (const x of c[`t${i}`] || []) {
+      const g = grupos.get(claveGrupo(diaVE(x.dimensions?.datetimeHour), rango.grupo));
+      if (g) { g.paginas += x.count; g.visitas += x.sum?.visits ?? 0; }
+    }
+  }
+  return {
+    rango: nombre,
+    grupo: rango.grupo,
+    puntos: [...grupos.values()],
+    ...(desde > pedido ? { datosDesde: diaVE(desde), guardaDias: Math.round(guardaMs / DIA) } : {}),
+  };
+}
+
+async function trafico(env, request, waitUntil, nombre) {
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID) return json({ error: 'Visitas sin conectar' }, 503);
+  const cache = globalThis.caches?.default;
+  const cacheKey = new Request(new URL(`/api/monitor/rango-cache/${nombre}`, request.url).toString());
+  const cached = await cache?.match(cacheKey);
+  if (cached) return json(await cached.json(), 200);
+  let datos;
+  try {
+    datos = await consultarRango(env, nombre);
+  } catch (err) {
+    return json({ error: err?.message || 'No se pudo consultar Cloudflare' }, 502);
+  }
+  if (cache) {
+    waitUntil(cache.put(cacheKey, new Response(JSON.stringify(datos), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${RANGO_CACHE_SECONDS}` },
+    })));
+  }
+  return json(datos, 200);
+}
+
 async function visitas(env, request, waitUntil) {
   if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID) return { configurado: false };
   // Guardadas 60 s en la caché del borde: Web Analytics no se actualiza más rápido y así no se gasta la API.
@@ -265,6 +372,9 @@ export async function onRequestGet({ env, request, waitUntil }) {
   if (!(await claveCorrecta(request.headers.get('X-Monitor-Clave'), env.MONITOR_CLAVE))) {
     return json({ error: 'Clave incorrecta' }, 401);
   }
+  // ?rango=quincena|mes|trimestre|semestre|anio: solo la serie de tráfico de ese periodo.
+  const rango = new URL(request.url).searchParams.get('rango');
+  if (rango) return RANGOS[rango] ? trafico(env, request, waitUntil, rango) : json({ error: 'Rango no válido' }, 400);
 
   const tunelListo = env.STOCK_API_URL && env.CF_ACCESS_CLIENT_ID && env.CF_ACCESS_CLIENT_SECRET;
   const sinTunel = { estado: 'config', ms: null, detalle: 'Faltan STOCK_API_URL o el token de Access' };

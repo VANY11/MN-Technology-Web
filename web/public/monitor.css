@@ -150,8 +150,8 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 56px; display: grid
 @keyframes latido { 50% { opacity: .35; } }
 
 /* ---------- tráfico ---------- */
-.m-tabs { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 11px; padding: 3px; gap: 2px; }
-.m-tabs button { background: transparent; color: var(--muted); padding: 5px 11px; border-radius: 8px; font-size: 13px; }
+.m-tabs { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: none; background: var(--surface-2); border: 1px solid var(--line); border-radius: 11px; padding: 3px; gap: 2px; }
+.m-tabs button { white-space: nowrap; flex: none; background: transparent; color: var(--muted); padding: 5px 11px; border-radius: 8px; font-size: 13px; }
 .m-tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / .18); }
 .m-leyenda { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 .m-leyenda span { display: inline-flex; align-items: center; gap: 7px; }
@@ -253,3 +253,5 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 56px; display: grid
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .tema-btn .luna { display: block; } :root:not([data-theme="dark"]) .tema-btn .sol { display: none; } }
 :root[data-theme="light"] .tema-btn .luna { display: block; }
 :root[data-theme="light"] .tema-btn .sol { display: none; }
+
+.m-trafico-nota { margin-top: 8px; }

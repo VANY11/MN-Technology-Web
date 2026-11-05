@@ -87,12 +87,55 @@ function mostrarTip(x, y, ...contenido) {
 const ocultarTip = () => { tip.hidden = true; };
 
 // ---------- serie de tráfico según el rango ----------
+// Los periodos largos no vienen en la revisión de cada 15 s: se piden aparte al abrir la pestaña y se renuevan cada 10 min.
+const LARGOS = ['quincena', 'mes', 'trimestre', 'semestre', 'anio'];
+const RANGOS = ['hora', 'dia', 'semana', ...LARGOS];
+const RENOVAR_LARGO_MS = 10 * 60e3;
+const largos = new Map();
+const fecha = (d, op) => new Date(`${d}T12:00:00`).toLocaleDateString('es-VE', op);
+
+async function cargarRango(r) {
+  const actual = largos.get(r);
+  if (actual?.cargando || (actual?.datos && Date.now() - actual.t < RENOVAR_LARGO_MS)) return;
+  if (actual?.error && !actual.datos && Date.now() - actual.t < 60e3) return;
+  largos.set(r, { ...actual, cargando: true });
+  let res, data;
+  try {
+    res = await fetch(`/api/monitor?rango=${r}`, { headers: { 'X-Monitor-Clave': clave }, cache: 'no-store' });
+    data = await res.json().catch(() => null);
+  } catch {}
+  largos.set(r, res?.ok && data?.puntos
+    ? { datos: data, t: Date.now() }
+    : { ...actual, error: data?.error || 'No se pudo consultar Cloudflare', t: Date.now() });
+  if (rango === r && ultimo) pintarTrafico(ultimo.visitas);
+}
+
+function serieLarga(d) {
+  const n = d.puntos.length;
+  const nombre = (p, i) => {
+    if (d.grupo === 'mes') return i === n - 1 ? 'Este mes (hasta hoy)' : fecha(p.t, { month: 'long', year: 'numeric' });
+    if (d.grupo === 'semana') return i === n - 1 ? 'Esta semana (hasta hoy)' : `Semana del ${fecha(p.t, { day: 'numeric', month: 'short' })}`;
+    return i === n - 1 ? 'hoy (hasta ahora)' : fecha(p.t, { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+  const eje = (p) => (d.grupo === 'mes' ? fecha(p.t, { month: 'short' }) : fecha(p.t, { day: 'numeric', month: 'short' }));
+  return {
+    puntos: d.puntos.map((p, i) => ({ etiqueta: nombre(p, i), eje: eje(p), paginas: p.paginas, visitas: p.visitas })),
+    unidad: d.grupo === 'mes' ? 'mes' : d.grupo === 'semana' ? 'semana' : 'día',
+    fin: d.grupo === 'mes' ? 'este mes' : d.grupo === 'semana' ? 'esta sem.' : 'hoy',
+    nota: d.datosDesde ? `Cloudflare guarda ${d.guardaDias} días de visitas: hay datos desde el ${fecha(d.datosDesde, { day: 'numeric', month: 'long' })}.` : null,
+  };
+}
+
 function serieTrafico(v) {
   const ahora = Date.now();
+  if (LARGOS.includes(rango)) {
+    const l = largos.get(rango);
+    return l?.datos ? serieLarga(l.datos) : { espera: true, error: l?.error };
+  }
   if (rango === 'semana') {
     if (!v.porDia) return null;
     // El último día es hoy y va por la mitad: se nombra «hoy» para que su caída no parezca una falla.
-    return { puntos: v.porDia.map((d, i, a) => ({ etiqueta: i === a.length - 1 ? 'hoy (hasta ahora)' : diaCorto(d.t), paginas: d.paginas, visitas: d.visitas })), unidad: 'día' };
+    return { puntos: v.porDia.map((d, i, a) => ({ etiqueta: i === a.length - 1 ? 'hoy (hasta ahora)' : diaCorto(d.t), eje: diaCorto(d.t), paginas: d.paginas, visitas: d.visitas })), unidad: 'día', fin: 'hoy' };
   }
   if (rango === 'dia') {
     if (!v.porHora) return null;
@@ -142,7 +185,7 @@ function graficoArea(serie, ancho) {
     : Array.from({ length: cuantas }, (_, k) => Math.round((k * (pts.length - 1)) / (cuantas - 1)));
   for (const i of marcas) {
     const t = svg('text', { x: x(i), y: H - 6, class: 'm-eje-x', 'text-anchor': i === 0 ? 'start' : i === pts.length - 1 ? 'end' : 'middle' });
-    t.textContent = i === pts.length - 1 ? (serie.unidad === 'día' ? 'hoy' : 'ahora') : pts[i].etiqueta;
+    t.textContent = i === pts.length - 1 ? (serie.fin || 'ahora') : (pts[i].eje || pts[i].etiqueta);
     s.append(t);
   }
   const pPag = pts.map((p, i) => [x(i), y(p.paginas)]);
@@ -186,6 +229,15 @@ function pintarTrafico(v) {
     return;
   }
   const serie = serieTrafico(v);
+  // Renueva el periodo largo abierto si ya tiene más de 10 minutos (no hace nada si está fresco).
+  if (LARGOS.includes(rango) && !serie?.espera) cargarRango(rango);
+  if (serie?.espera) {
+    caja.replaceChildren(el('div', { class: 'm-aviso' },
+      el('strong', {}, serie.error ? 'No se pudo cargar este periodo' : 'Cargando el periodo…'),
+      el('p', {}, serie.error || 'Pidiendo las visitas a Cloudflare.')));
+    if (!serie.error) cargarRango(rango);
+    return;
+  }
   if (!serie) {
     caja.replaceChildren(el('div', { class: 'm-aviso' }, el('strong', {}, 'Este periodo no está disponible'), el('p', {}, v.avisos?.[0] || 'Cloudflare no devolvió datos por hora.')));
     return;
@@ -196,7 +248,8 @@ function pintarTrafico(v) {
     el('div', { class: 'm-leyenda' },
       el('span', {}, el('i', { class: 'm-key s1' }), 'Páginas vistas ', el('b', {}, num(totPag))),
       el('span', {}, el('i', { class: 'm-key s2' }), 'Visitas ', el('b', {}, num(totVis)))),
-    graficoArea(serie, caja.clientWidth));
+    graficoArea(serie, caja.clientWidth),
+    ...(serie.nota ? [el('p', { class: 'm-nota m-trafico-nota' }, serie.nota)] : []));
 }
 
 // ---------- indicadores ----------
@@ -431,10 +484,11 @@ function elegirRango(r) {
   rango = r;
   guardar(RANGO_KEY, r);
   document.querySelectorAll('[data-rango]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.rango === r)));
+  if (LARGOS.includes(r) && largos.get(r)?.error) largos.delete(r);
   if (ultimo) pintarTrafico(ultimo.visitas);
 }
 document.querySelectorAll('[data-rango]').forEach((b) => b.addEventListener('click', () => elegirRango(b.dataset.rango)));
-elegirRango(['hora', 'dia', 'semana'].includes(rango) ? rango : 'hora');
+elegirRango(RANGOS.includes(rango) ? rango : 'hora');
 
 $('login').addEventListener('submit', (e) => {
   e.preventDefault();
