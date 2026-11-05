@@ -154,3 +154,54 @@ test('«hoy» empieza a medianoche de Venezuela', () => {
   assert.equal(inicioDeHoyVE(Date.parse('2026-10-18T21:00:00Z')).toISOString(), '2026-10-18T04:00:00.000Z');
   assert.equal(inicioDeHoyVE(Date.parse('2026-10-19T02:00:00Z')).toISOString(), '2026-10-18T04:00:00.000Z');
 });
+
+test('rango largo: respeta lo que guarda Cloudflare, parte en tramos y agrupa por semana', async () => {
+  const ahora = Date.parse('2026-11-05T03:00:00Z');
+  let rangoQuery;
+  respuestas.graphql = (init) => {
+    const { query, variables } = JSON.parse(init.body);
+    if (query.startsWith('query Limites')) {
+      return jsonRes({ data: { viewer: { accounts: [{ settings: { rumPageloadEventsAdaptiveGroups: { maxDuration: 2678400, notOlderThan: 90 * 86400 } } }] } } });
+    }
+    rangoQuery = { query, variables };
+    return jsonRes({ data: { viewer: { accounts: [{
+      t0: [{ count: 10, sum: { visits: 4 }, dimensions: { datetimeHour: '2026-08-10T15:00:00Z' } }],
+      t3: [{ count: 6, sum: { visits: 2 }, dimensions: { datetimeHour: '2026-11-04T15:00:00Z' } }],
+    }] } } });
+  };
+  const { consultarRango } = await import('../functions/api/monitor.js');
+  const r = await consultarRango({ ...env, CF_API_TOKEN: 'x', CF_ACCOUNT_ID: 'y' }, 'semestre', ahora);
+  assert.equal(r.grupo, 'semana');
+  assert.equal(r.guardaDias, 90);
+  assert.equal(r.datosDesde, '2026-08-07');
+  assert.equal(Object.keys(rangoQuery.variables).filter((k) => k.startsWith('f')).length, 3, '90 días en tramos de 30');
+  assert.ok(r.puntos.length >= 26 && r.puntos.length <= 27);
+  assert.equal(r.puntos.reduce((s, p) => s + p.paginas, 0), 10, 'solo suma los tramos que se pidieron (t3 no existe)');
+});
+
+test('rango no válido y rango por la URL', async () => {
+  const res = await run(env, new Request('https://mntechve.com/api/monitor?rango=siglo', { headers: { 'X-Monitor-Clave': 'clave-monitor' } }));
+  assert.equal(res.status, 400);
+  const sin = await run(env, new Request('https://mntechve.com/api/monitor?rango=mes', { headers: { 'X-Monitor-Clave': 'clave-monitor' } }));
+  assert.equal(sin.status, 503);
+});
+
+test('agrupa días en semanas que empiezan el lunes y en meses', async () => {
+  const { claveGrupo } = await import('../functions/api/monitor.js');
+  assert.equal(claveGrupo('2026-11-05', 'semana'), '2026-11-02');
+  assert.equal(claveGrupo('2026-11-02', 'semana'), '2026-11-02');
+  assert.equal(claveGrupo('2026-11-01', 'semana'), '2026-10-26');
+  assert.equal(claveGrupo('2026-11-05', 'mes'), '2026-11-01');
+});
+
+test('el año son 12 meses de calendario', async () => {
+  respuestas.graphql = (init) => {
+    const { query } = JSON.parse(init.body);
+    if (query.startsWith('query Limites')) return jsonRes({ data: null, errors: [{ message: 'sin settings' }] });
+    return jsonRes({ data: { viewer: { accounts: [{}] } } });
+  };
+  const { consultarRango } = await import('../functions/api/monitor.js');
+  const r = await consultarRango({ ...env, CF_API_TOKEN: 'x', CF_ACCOUNT_ID: 'y' }, 'anio', Date.parse('2026-11-05T03:00:00Z'));
+  assert.deepEqual([r.puntos.length, r.puntos[0].t, r.puntos[11].t], [12, '2025-12-01', '2026-11-01']);
+  assert.equal(r.datosDesde, undefined, 'sin límites conocidos no se recorta');
+});
